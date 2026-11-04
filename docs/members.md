@@ -45,7 +45,7 @@
 
 The server knows its own release (`ORCH_VERSION`) and the version each agent reports when it connects. When one of your agents runs an older release, the web app shows a banner at the top of every page, for example "Your agent on laptop is out of date (v0.4.1 → v0.4.3)", and the **My Server** page shows the state of each agent. Local `dev` builds are never reported as outdated.
 
-**One click.** Press **Update now**. The server sends the agent an `agent.update` message naming the target version and the image `ghcr.io/theroxat/orch-agent:<version>`. The server decides the image from its own release and `ORCH_AGENT_IMAGE_REPO`; the request cannot choose it. The agent then:
+**One click.** Press **Update now**. The server sends the agent an `agent.update` message naming the target version and the image `ghcr.io/selfhostr/orch-agent:<version>`. The server decides the image from its own release and `ORCH_AGENT_IMAGE_REPO`; the request cannot choose it. The agent then:
 
 1. refuses when tasks are running (choose **Update when idle** to wait until they finish; meanwhile it takes no new automatic offers);
 2. checks that the image is exactly `<its configured repository>:<release>` (`ORCH_AGENT_IMAGE_REPO`, from `ORCH_AGENT_IMAGE` in `~/orch/.env`); anything else is refused;
@@ -56,6 +56,14 @@ The server knows its own release (`ORCH_VERSION`) and the version each agent rep
 The page follows the steps (requested, waiting for tasks, downloading, restarting). The update is marked done when the agent reconnects with the new version. Only the owner of an agent can update it, and every request is audited (`agent.update_requested`, `agent.update_done`, `agent.update_failed`).
 
 **From the machine.** `orch update` does the same thing locally, for the version the server announces (`orch update --when-idle` waits for running tasks; `orch update --version=0.4.3` picks a release). `orch status` shows the latest version and the update progress. If the agent container is stopped, the `orch` shortcut falls back to `docker compose pull agent && docker compose up -d agent`.
+
+**Agents installed before the move to `ghcr.io/selfhostr` (v0.9.0 and older).** Releases up to v0.9.0 were published as `ghcr.io/theroxat/orch-agent`, and those agents only accept updates from that repository, which gets no new releases. One-click update answers "This agent still uses the old image" for them. Switch the agent once on its machine (Linux; on macOS use `sed -i ''`):
+
+```sh
+cd ~/orch && sed -i 's#ghcr.io/theroxat/#ghcr.io/selfhostr/#g' compose.yaml .env && sed -i '/^ORCH_AGENT_TAG=/d' .env && docker compose pull agent && docker compose up -d agent
+```
+
+This points `compose.yaml` (and `ORCH_AGENT_IMAGE`, if you set it) at the new repository and drops the pinned tag, so the agent starts the latest release. Later updates work with one click again. Re-running the installer also refreshes `compose.yaml`, but keeps a pinned `ORCH_AGENT_TAG`.
 
 **Manually**, for agents too old for one-click updates, or for installs not made with `install.sh`:
 

@@ -9,6 +9,8 @@ import {
   AgentUpdateRequestSchema,
   EnrollRequestSchema,
   isOutdated,
+  LEGACY_AGENT_IMAGE_REPO,
+  needsImageMove,
   normalizeVersion,
   parseAgentCredential,
   type AgentView,
@@ -224,6 +226,14 @@ export function registerAgents(
     if (!gateway.isConnected(a.id)) throw new HttpError(409, 'agent_offline', 'Agent is offline');
     if (!gateway.canSelfUpdate(a.id)) {
       throw new HttpError(409, 'update_unsupported', 'This agent cannot update itself remotely');
+    }
+    if (needsImageMove(a.agentVersion, target, config.ORCH_AGENT_IMAGE_REPO)) {
+      throw new HttpError(
+        409,
+        'image_moved',
+        `This agent still pulls ${LEGACY_AGENT_IMAGE_REPO}, which gets no new releases: ` +
+          `switch it to ${config.ORCH_AGENT_IMAGE_REPO} once by hand (see the docs, Updating agents)`,
+      );
     }
     const updateId = `upd_${randomBytes(12).toString('base64url')}`;
     // The image is decided here and only here: never taken from the request.

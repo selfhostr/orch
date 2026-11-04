@@ -27,7 +27,7 @@ import { Updater } from '../src/update/updater';
 import { FakeServer } from './helpers/fake-server';
 import { CREDENTIAL, tempDir, waitFor } from './helpers/util';
 
-const REPO = 'ghcr.io/theroxat/orch-agent';
+const REPO = 'ghcr.io/selfhostr/orch-agent';
 const IMAGE_ID = `sha256:${'a'.repeat(64)}`;
 const COMPOSE_TEMPLATE = readFileSync(
   resolve(__dirname, '../../../deploy/agent/compose.yaml'),
@@ -75,8 +75,8 @@ describe('image validation', () => {
   it('accepts only <configured repo>:<release>', () => {
     expect(validateUpdateImage(`${REPO}:0.4.3`, '0.4.3', REPO)).toBe(`${REPO}:0.4.3`);
     const bad: [string, string][] = [
-      ['evil.io/theroxat/orch-agent:0.4.3', '0.4.3'],
-      ['ghcr.io/theroxat/orch-agent-evil:0.4.3', '0.4.3'],
+      ['evil.io/selfhostr/orch-agent:0.4.3', '0.4.3'],
+      ['ghcr.io/selfhostr/orch-agent-evil:0.4.3', '0.4.3'],
       [`${REPO}:0.4.4`, '0.4.3'],
       [`${REPO}:latest`, 'latest'],
       [`${REPO}@sha256:${'b'.repeat(64)}`, '0.4.3'],

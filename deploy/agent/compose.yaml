@@ -4,7 +4,7 @@ name: orch-agent
 
 services:
   agent:
-    image: ${ORCH_AGENT_IMAGE:-ghcr.io/theroxat/orch-agent}:${ORCH_AGENT_TAG:-latest}
+    image: ${ORCH_AGENT_IMAGE:-ghcr.io/selfhostr/orch-agent}:${ORCH_AGENT_TAG:-latest}
     restart: unless-stopped
     environment:
       ORCH_SERVER_URL: ${ORCH_SERVER_URL:?set ORCH_SERVER_URL in .env}
@@ -14,7 +14,7 @@ services:
       ORCH_CLAUDE_USAGE_ROOT: /host-claude
       ORCH_PLAN: ${ORCH_PLAN:-pro}
       # One-click update only ever pulls <this repository>:<release version>.
-      ORCH_AGENT_IMAGE_REPO: ${ORCH_AGENT_IMAGE:-ghcr.io/theroxat/orch-agent}
+      ORCH_AGENT_IMAGE_REPO: ${ORCH_AGENT_IMAGE:-ghcr.io/selfhostr/orch-agent}
     volumes:
       # The agent starts task containers through the host Docker daemon (and, for `orch update`,
       # a short-lived helper that runs `docker compose up -d agent` in this directory).

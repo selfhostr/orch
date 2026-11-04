@@ -16,6 +16,10 @@
  *   installation, installation_repositories                -> installations / projects updated
  *   member (collaborator added|removed|edited)             -> that user's cached repo role is stale
  *   repository (privatized|publicized|deleted|transferred) -> visibility updated, all roles stale
+ *   repository (renamed|transferred), installation created, repositories added
+ *                                                          -> known project follows the repository:
+ *                                                             new full name, new installation,
+ *                                                             restored if a lost access archived it
  *   organization (member_removed|member_added)             -> the user's roles on the org's repos stale
  *   membership (team member added|removed)                 -> the user's roles on the org's repos stale
  *   team (added_to|removed_from repository, edited, deleted) -> roles of the repo (or org) stale
@@ -76,6 +80,8 @@ interface Payload {
     head: { ref: string; sha: string; repo?: { id: number } | null };
     base: { ref: string };
   };
+  /** installation.created: the repositories the new installation can reach. */
+  repositories?: Array<{ id: number; full_name: string }>;
   repositories_added?: Array<{ id: number; full_name: string }>;
   repositories_removed?: Array<{ id: number; full_name: string }>;
 }
@@ -228,7 +234,12 @@ export function registerWebhooks(
         where: { id: project.id },
         data: { isPrivate: p.action === 'privatized' },
       });
-    } else if (!['deleted', 'transferred', 'archived', 'renamed'].includes(p.action ?? '')) {
+    } else if (p.action === 'renamed' || p.action === 'transferred') {
+      // GitHub sends `transferred` only to the new owner's installation: follow it there.
+      if (p.repository && p.installation) {
+        await relinkProjects(await upsertInstallation(p.installation), [p.repository]);
+      }
+    } else if (!['deleted', 'archived'].includes(p.action ?? '')) {
       return 'ignored';
     }
     await invalidateRepoAccess(prisma, { projectId: project.id }, deps.github);
@@ -271,21 +282,77 @@ export function registerWebhooks(
 
   // ---------- installations ----------
 
+  type InstallationRef = NonNullable<Payload['installation']>;
+
+  /** The Installation row of a webhook's installation, created on first sight. */
+  function upsertInstallation(inst: InstallationRef, update: { suspendedAt?: null } = {}) {
+    return prisma.installation.upsert({
+      where: { githubInstallationId: BigInt(inst.id) },
+      create: {
+        githubInstallationId: BigInt(inst.id),
+        accountLogin: inst.account?.login ?? 'unknown',
+        accountType: inst.account?.type ?? 'User',
+      },
+      update,
+    });
+  }
+
+  /**
+   * `installation` reaches these repositories (renamed, transferred, App installed on the new
+   * owner, repository added to the installation). Projects are keyed by the immutable repository
+   * id: a known one takes the current full name and installation (tokens are minted from both),
+   * and is restored when it had been archived because the access was lost.
+   */
+  async function relinkProjects(
+    installation: { id: string; suspendedAt: Date | null },
+    repos: Array<{ id: number; full_name: string }>,
+  ) {
+    for (const repo of repos) {
+      const project = await prisma.project.findUnique({
+        where: { githubRepoId: BigInt(repo.id) },
+      });
+      if (!project) continue;
+      const restore = !!project.archivedAt && !installation.suspendedAt;
+      if (
+        project.fullName === repo.full_name &&
+        project.installationId === installation.id &&
+        !restore
+      ) {
+        continue;
+      }
+      await prisma.project.update({
+        where: { id: project.id },
+        data: {
+          fullName: repo.full_name,
+          installationId: installation.id,
+          ...(restore && { archivedAt: null }),
+        },
+      });
+      await audit(prisma, {
+        actorType: 'GITHUB',
+        action: 'project.relinked',
+        projectId: project.id,
+        data: { fromFullName: project.fullName, fullName: repo.full_name, restored: restore },
+      });
+      await invalidateRepoAccess(prisma, { projectId: project.id }, deps.github);
+      if (restore) {
+        const members = await prisma.participation.findMany({
+          where: { projectId: project.id },
+          select: { userId: true },
+        });
+        await gateway.pushConfigToUsers(members.map((m) => m.userId));
+      }
+    }
+  }
+
   async function onInstallation(p: Payload): Promise<string> {
     const inst = p.installation;
     if (!inst) return 'ignored';
     const id = BigInt(inst.id);
     const now = new Date();
     if (p.action === 'created' || p.action === 'new_permissions_accepted') {
-      await prisma.installation.upsert({
-        where: { githubInstallationId: id },
-        create: {
-          githubInstallationId: id,
-          accountLogin: inst.account?.login ?? 'unknown',
-          accountType: inst.account?.type ?? 'User',
-        },
-        update: { suspendedAt: null },
-      });
+      const installation = await upsertInstallation(inst, { suspendedAt: null });
+      if (p.action === 'created') await relinkProjects(installation, p.repositories ?? []);
       return 'installation.upserted';
     }
     const existing = await prisma.installation.findUnique({ where: { githubInstallationId: id } });
@@ -314,15 +381,8 @@ export function registerWebhooks(
   async function onInstallationRepos(p: Payload): Promise<string> {
     const inst = p.installation;
     if (!inst) return 'ignored';
-    const existing = await prisma.installation.upsert({
-      where: { githubInstallationId: BigInt(inst.id) },
-      create: {
-        githubInstallationId: BigInt(inst.id),
-        accountLogin: inst.account?.login ?? 'unknown',
-        accountType: inst.account?.type ?? 'User',
-      },
-      update: {},
-    });
+    const existing = await upsertInstallation(inst);
+    await relinkProjects(existing, p.repositories_added ?? []);
     const removed = (p.repositories_removed ?? []).map((r) => BigInt(r.id));
     if (removed.length) {
       const gone = await prisma.project.findMany({

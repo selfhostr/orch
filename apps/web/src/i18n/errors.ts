@@ -17,6 +17,7 @@ const SPECIFIC = {
   dependency_cycle: 'errors.api.dependency_cycle',
   dispatcher_unavailable: 'errors.api.dispatcher_unavailable',
   github_not_configured: 'errors.api.github_not_configured',
+  image_moved: 'errors.api.image_moved',
   no_agent_online: 'errors.api.no_agent_online',
   not_participating: 'errors.api.not_participating',
   not_retryable: 'errors.api.not_retryable',

@@ -21,7 +21,7 @@ myst_heading_anchors = 3
 html_theme = "furo"
 html_title = "orch"
 html_theme_options = {
-    "source_repository": "https://github.com/Theroxat/claude_orch/",
+    "source_repository": "https://github.com/selfhostr/orch/",
     "source_branch": "main",
     "source_directory": "docs/",
 }
