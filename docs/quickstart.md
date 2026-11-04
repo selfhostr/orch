@@ -7,8 +7,8 @@ You need a Linux host with Docker Engine 26+ (Compose plugin), ports 80 and 443 
 1. **Deploy the server.** Point a DNS record at the host, then:
 
    ```sh
-   git clone https://github.com/Theroxat/claude_orch.git
-   cd claude_orch/deploy/server
+   git clone https://github.com/selfhostr/orch.git
+   cd orch/deploy/server
    cp .env.example .env     # fill it in, see Installation
    docker compose up -d
    ```

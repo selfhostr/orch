@@ -65,7 +65,7 @@ The proposed stack is kept. Changes and additions, with the reason for each:
 ## 2. Repository tree
 
 ```
-claude_orch/
+orch/
 ├── README.md                      # install server, create GitHub App, add member, MCP setup
 ├── LICENSE                        # MIT
 ├── install.sh                     # member installer, served by the server at /install.sh

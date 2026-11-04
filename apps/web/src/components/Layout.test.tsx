@@ -41,8 +41,8 @@ describe('header links', () => {
     renderApp('/projects');
     const docs = await screen.findByRole('link', { name: 'Documentation' });
     const repo = screen.getByRole('link', { name: 'GitHub repository' });
-    expect(docs.getAttribute('href')).toBe('https://claude-orch.readthedocs.io');
-    expect(repo.getAttribute('href')).toBe('https://github.com/Theroxat/claude_orch');
+    expect(docs.getAttribute('href')).toBe('https://orch.selfhostr.io/docs/');
+    expect(repo.getAttribute('href')).toBe('https://github.com/selfhostr/orch');
     for (const a of [docs, repo]) {
       expect(a.getAttribute('target')).toBe('_blank');
       expect(a.getAttribute('rel')).toBe('noopener noreferrer');

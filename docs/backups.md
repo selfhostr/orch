@@ -80,7 +80,7 @@ Use a key limited to that bucket. Uploads never delete anything by default. Set 
 `deploy/server/backup/restore.sh` replaces the database with a chosen dump. Run it on the host:
 
 ```sh
-cd claude_orch/deploy/server
+cd orch/deploy/server
 backup/restore.sh --list                          # dumps in the backups volume
 backup/restore.sh                                 # newest dump, asks for confirmation
 backup/restore.sh orch-20261022T030000Z.dump      # a specific one

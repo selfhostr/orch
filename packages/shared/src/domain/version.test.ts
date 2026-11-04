@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { IMAGE_REPO_RE, compareVersions, isOutdated, normalizeVersion } from './version';
+import {
+  DEFAULT_AGENT_IMAGE_REPO,
+  IMAGE_REPO_RE,
+  LEGACY_AGENT_IMAGE_REPO,
+  compareVersions,
+  isOutdated,
+  needsImageMove,
+  normalizeVersion,
+} from './version';
 import {
   AGENT_ACKED_TYPES,
   AgentUpdatePayloadSchema,
@@ -33,11 +41,26 @@ describe('versions', () => {
   });
 
   it('image repo pattern accepts registries and rejects tags or options', () => {
-    expect(IMAGE_REPO_RE.test('ghcr.io/theroxat/orch-agent')).toBe(true);
+    expect(IMAGE_REPO_RE.test('ghcr.io/selfhostr/orch-agent')).toBe(true);
     expect(IMAGE_REPO_RE.test('localhost:5000/orch-agent')).toBe(true);
-    expect(IMAGE_REPO_RE.test('ghcr.io/theroxat/orch-agent:1.0.0')).toBe(false);
+    expect(IMAGE_REPO_RE.test('ghcr.io/selfhostr/orch-agent:1.0.0')).toBe(false);
     expect(IMAGE_REPO_RE.test('--privileged')).toBe(false);
     expect(IMAGE_REPO_RE.test('orch-agent')).toBe(false);
+  });
+
+  it('flags agents that still pull from the legacy image repository', () => {
+    const repo = DEFAULT_AGENT_IMAGE_REPO;
+    expect(needsImageMove('0.9.0', '0.10.0', repo)).toBe(true);
+    expect(needsImageMove('v0.4.1', '0.10.0', repo)).toBe(true);
+    expect(needsImageMove('0.9.0', '1.0.0-rc.1', repo)).toBe(true);
+    // Newer agents already use the new repository; older targets still exist in the old one.
+    expect(needsImageMove('0.10.0', '0.11.0', repo)).toBe(false);
+    expect(needsImageMove('0.4.1', '0.9.0', repo)).toBe(false);
+    // A server that keeps (or mirrors) another repository decides for itself.
+    expect(needsImageMove('0.9.0', '0.10.0', LEGACY_AGENT_IMAGE_REPO)).toBe(false);
+    expect(needsImageMove('0.9.0', '0.10.0', 'reg.example/o/agent')).toBe(false);
+    expect(needsImageMove('dev', '0.10.0', repo)).toBe(false);
+    expect(needsImageMove('0.9.0', null, repo)).toBe(false);
   });
 });
 
@@ -46,7 +69,7 @@ describe('agent.update protocol', () => {
     const m = serverMessage('agent.update', {
       updateId: 'u1',
       targetVersion: '0.4.3',
-      image: 'ghcr.io/theroxat/orch-agent:0.4.3',
+      image: 'ghcr.io/selfhostr/orch-agent:0.4.3',
       whenIdle: false,
     });
     expect(parseServerMessage(JSON.stringify(m)).ok).toBe(true);

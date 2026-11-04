@@ -36,7 +36,7 @@ import { useToast } from '../ui/Toast';
 import { CopyButton } from './CopyButton';
 
 const SIGNING_DOCS =
-  'https://claude-orch.readthedocs.io/en/latest/notifications.html#verifying-webhook-signatures';
+  'https://orch.selfhostr.io/docs/notifications.html#verifying-webhook-signatures';
 
 const KEY = ['notifications', 'settings'] as const;
 

@@ -4,13 +4,13 @@ Requirements: a Linux host with Docker Engine 26+ and the Compose plugin, ports 
 
 The stack (`deploy/server/compose.yaml`) has these pieces:
 
-| Piece             | What it does                                                                                   |
-| ----------------- | ---------------------------------------------------------------------------------------------- |
-| `caddy`           | Automatic HTTPS for `ORCH_DOMAIN`, serves the web build, proxies the rest to the server        |
-| `server`          | REST API, GitHub OAuth and webhooks, dispatcher, agent WebSocket gateway, MCP server           |
-| `postgres`        | All state. Internal network only                                                               |
-| `backup`          | Scheduled `pg_dump` with rotation, optional encryption and S3 upload ({doc}`backups`)          |
-| `agent` (members) | `ghcr.io/theroxat/orch-agent`: runs on each member's machine, drives their local Docker daemon |
+| Piece             | What it does                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| `caddy`           | Automatic HTTPS for `ORCH_DOMAIN`, serves the web build, proxies the rest to the server         |
+| `server`          | REST API, GitHub OAuth and webhooks, dispatcher, agent WebSocket gateway, MCP server            |
+| `postgres`        | All state. Internal network only                                                                |
+| `backup`          | Scheduled `pg_dump` with rotation, optional encryption and S3 upload ({doc}`backups`)           |
+| `agent` (members) | `ghcr.io/selfhostr/orch-agent`: runs on each member's machine, drives their local Docker daemon |
 
 ## 1. DNS
 
@@ -19,8 +19,8 @@ Create an `A` (and optionally `AAAA`) record for your domain, for example `orch.
 ## 2. Get the deployment files
 
 ```sh
-git clone https://github.com/Theroxat/claude_orch.git
-cd claude_orch/deploy/server
+git clone https://github.com/selfhostr/orch.git
+cd orch/deploy/server
 cp .env.example .env
 ```
 
@@ -51,7 +51,7 @@ The file must exist before the first start (otherwise Docker creates a directory
 ## 5. Start
 
 ```sh
-docker compose up -d          # pulls ghcr.io/theroxat/orch-server and orch-web
+docker compose up -d          # pulls ghcr.io/selfhostr/orch-server and orch-web
 # or build from your checkout:
 docker compose up -d --build
 ```
@@ -161,6 +161,8 @@ The server exposes `/healthz` (liveness) and `/readyz` (database reachable), plu
 git pull
 docker compose pull && docker compose up -d     # or: docker compose up -d --build
 ```
+
+**Moving from `ghcr.io/theroxat` (servers on v0.9.0 or older).** Releases after v0.9.0 are published only as `ghcr.io/selfhostr/orch-server`, `orch-web` and `orch-agent`; `deploy/server/compose.yaml` now uses those names. If `.env` pins `ORCH_VERSION` to an old release, set it to the new one before `docker compose pull`, and remove any `ORCH_AGENT_IMAGE_REPO=ghcr.io/theroxat/orch-agent` override (the default is now `ghcr.io/selfhostr/orch-agent`). Agents from v0.9.0 and older must be switched once by hand, see {ref}`updating-agents`.
 
 Members upgrade their agent with `docker compose -f ~/orch/compose.yaml pull && docker compose -f ~/orch/compose.yaml up -d`, or with one click, see {ref}`updating-agents`.
 
