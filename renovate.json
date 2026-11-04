@@ -28,11 +28,6 @@
       "groupName": "Docker base images"
     },
     {
-      "description": "Group pip requirements (docs/requirements.txt)",
-      "matchManagers": ["pip_requirements"],
-      "groupName": "pip (docs)"
-    },
-    {
       "description": "Group Prisma packages together",
       "matchPackageNames": ["@prisma/*", "prisma"],
       "groupName": "Prisma"
