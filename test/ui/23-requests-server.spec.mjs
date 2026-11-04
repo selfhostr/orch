@@ -72,11 +72,10 @@ test('my server: install command, agent cards, update banner, Claude login, paus
   await expect(sw).toHaveAttribute('aria-checked', 'false');
   await sw.click();
   await expect(page.getByText('alice-laptop paused')).toBeVisible();
-  // Update now
+  // Update now: alice-laptop (seeded 0.5.2) still pulls ghcr.io/theroxat, so the server answers
+  // image_moved and the page asks for the one-time manual switch.
   await page.getByRole('button', { name: 'Update now alice-laptop' }).last().click();
-  await expect(
-    page.getByRole('status', { name: /Update status alice-laptop/ }).first(),
-  ).toBeVisible();
+  await expect(page.getByText(/still uses the old image/).first()).toBeVisible();
   await settle(page);
   await shot(page, 'my-server-alice-after-update');
 });
