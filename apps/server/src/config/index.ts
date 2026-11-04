@@ -25,7 +25,7 @@ const ConfigSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   ORCH_BASE_URL: z.url().default('http://localhost:8470'),
   /**
-   * Public URL users and agents reach orch at (for example https://orch.selfhostr.io). When set it
+   * Public URL users and agents reach orch at (for example https://orch-app.selfhostr.io). When set it
    * wins over ORCH_BASE_URL. Behind Cloudflare Tunnel the request reaches the server over plain
    * HTTP, so OAuth callbacks, install commands and the Secure cookie flag derive from this value.
    */

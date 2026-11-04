@@ -42,9 +42,9 @@ describe('public URL and proxy trust', () => {
     const c = loadConfig({
       ...base,
       ORCH_BASE_URL: 'http://orch:3000',
-      ORCH_PUBLIC_URL: 'https://orch.selfhostr.io',
+      ORCH_PUBLIC_URL: 'https://orch-app.selfhostr.io',
     });
-    expect(c.ORCH_BASE_URL).toBe('https://orch.selfhostr.io');
+    expect(c.ORCH_BASE_URL).toBe('https://orch-app.selfhostr.io');
   });
 
   it('an empty ORCH_PUBLIC_URL is ignored', () => {

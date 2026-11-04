@@ -3,7 +3,7 @@ import { FakeGithub, api, loginAs, makeApp, prisma } from './harness';
 
 // Behind Cloudflare Tunnel the server only ever sees plain HTTP from Caddy. Every public URL it
 // emits must come from ORCH_PUBLIC_URL, and X-Forwarded-* is honoured only from trusted peers.
-const PUBLIC = 'https://orch.selfhostr.io';
+const PUBLIC = 'https://orch-app.selfhostr.io';
 const gh = new FakeGithub();
 const app = makeApp(gh, { env: { ORCH_PUBLIC_URL: PUBLIC, ORCH_BASE_URL: 'http://orch:3000' } });
 afterAll(async () => {

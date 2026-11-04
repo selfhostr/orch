@@ -14,7 +14,7 @@ The stack (`deploy/server/compose.yaml`) has these pieces:
 
 ## 1. DNS
 
-Create an `A` (and optionally `AAAA`) record for your domain, for example `orch.selfhostr.io`, pointing at the host. Caddy requests the Let's Encrypt certificate on first start, so DNS must resolve before you start the stack.
+Create an `A` (and optionally `AAAA`) record for your domain, for example `orch-app.selfhostr.io`, pointing at the host. Caddy requests the Let's Encrypt certificate on first start, so DNS must resolve before you start the stack.
 
 ## 2. Get the deployment files
 
@@ -60,7 +60,7 @@ The server applies database migrations on every start. Check it:
 
 ```sh
 docker compose ps
-curl -fsS https://orch.selfhostr.io/healthz     # {"status":"ok"}
+curl -fsS https://orch-app.selfhostr.io/healthz     # {"status":"ok"}
 ```
 
 If you change `HTTP_PORT` or `HTTPS_PORT`, the Let's Encrypt challenge cannot succeed on its own. Use Caddy behind another proxy that owns 80/443, or a DNS challenge build of Caddy.
@@ -81,12 +81,12 @@ The env lists keep working for people who should always have access (logins, who
 If you host behind a Cloudflare Tunnel, Cloudflare terminates TLS for your domain and `cloudflared` forwards plain HTTP to a local port. There is no ACME and ports 80 and 443 are not used. Set these in `.env`:
 
 ```sh
-ORCH_DOMAIN=orch.selfhostr.io
+ORCH_DOMAIN=orch-app.selfhostr.io
 ORCH_TLS_MODE=tunnel                      # default is acme
 HTTP_PORT=8495                            # local port cloudflared connects to
 ORCH_BIND_ADDR=127.0.0.1                  # keep the port off the LAN
 HTTPS_PUBLISH=127.0.0.1:                  # nothing serves 443; maps it to a random loopback port
-ORCH_PUBLIC_URL=https://orch.selfhostr.io # always https
+ORCH_PUBLIC_URL=https://orch-app.selfhostr.io # always https
 ```
 
 In this mode Caddy serves plain HTTP only (`auto_https off`, no HSTS; Cloudflare can add HSTS at the edge). The routes and the Content-Security-Policy are the same as in ACME mode. The server builds the GitHub OAuth callback, the `install.sh` URL, the install and `claude mcp add` commands and the `Secure` session cookie from `ORCH_PUBLIC_URL`, so they say `https` even though the request reached the server over HTTP. It trusts `X-Forwarded-For` only from private networks (the Caddy container), see `ORCH_TRUST_PROXY`.
@@ -95,7 +95,7 @@ In this mode Caddy serves plain HTTP only (`auto_https off`, no HSTS; Cloudflare
 
 ```yaml
 ingress:
-  - hostname: orch.selfhostr.io
+  - hostname: orch-app.selfhostr.io
     service: http://localhost:8495
   - service: http_status:404
 ```
