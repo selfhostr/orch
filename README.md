@@ -4,10 +4,10 @@
 
 **How do you hand a teammate's idle Claude capacity a to-do list, without ever sharing an account?**
 
-[**orch.selfhostr.io**](https://orch.selfhostr.io) · [Website](https://theroxat.github.io/claude_orch/) · [Docs](https://claude-orch.readthedocs.io) · [Source](https://github.com/Theroxat/claude_orch) · [Design notes](docs/PLAN.md) · [Deploy](#deploy-the-server)
+[**orch.selfhostr.io**](https://orch.selfhostr.io) · [Docs](https://orch.selfhostr.io/docs/) · [Source](https://github.com/selfhostr/orch) · [Design notes](docs/PLAN.md) · [Deploy](#deploy-the-server)
 
-[![Website](https://img.shields.io/badge/website-theroxat.github.io-d97757)](https://theroxat.github.io/claude_orch/)
-[![Docs](https://readthedocs.org/projects/claude-orch/badge/?version=latest)](https://claude-orch.readthedocs.io)
+[![Website](https://img.shields.io/badge/website-orch.selfhostr.io-d97757)](https://orch.selfhostr.io/)
+[![Docs](https://img.shields.io/badge/docs-orch.selfhostr.io%2Fdocs-blue)](https://orch.selfhostr.io/docs/)
 ![Node >=22](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=nodedotjs&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-793%20passing-2ea44f)
 ![Docker](https://img.shields.io/badge/everything%20in-Docker-2496ed?logo=docker&logoColor=white)
@@ -26,7 +26,7 @@ A shared to-do list for small, trusted teams, with automation on top. Tasks are 
 
 <img src="docs/screenshot-pool.png" alt="The Pool: who is lending capacity right now" width="100%">
 
-Full documentation (quickstart, server installation, concepts, CLI and MCP reference, configuration, security model, FAQ) lives at **[claude-orch.readthedocs.io](https://claude-orch.readthedocs.io)**; its sources are in [`docs/`](docs/).
+Full documentation (quickstart, server installation, concepts, CLI and MCP reference, configuration, security model, FAQ) lives at **[orch.selfhostr.io/docs](https://orch.selfhostr.io/docs/)**; its sources are in [`docs/`](docs/).
 
 ## Contents
 
@@ -56,20 +56,20 @@ Full documentation (quickstart, server installation, concepts, CLI and MCP refer
  +--------------------------------------------------------------------+
 ```
 
-| Piece      | What it does                                                                               |
-| ---------- | ------------------------------------------------------------------------------------------ |
-| `caddy`    | Automatic HTTPS for `ORCH_DOMAIN`, serves the web build, proxies the rest to the server    |
-| `server`   | REST API, GitHub OAuth and webhooks, dispatcher, agent WebSocket gateway, MCP server       |
-| `postgres` | All state. Internal network only                                                           |
-| `backup`   | Scheduled `pg_dump` with rotation, optional age encryption and S3 upload                   |
-| `agent`    | `ghcr.io/theroxat/orch-agent`: runs on each member's machine and drives their local Docker |
+| Piece      | What it does                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| `caddy`    | Automatic HTTPS for `ORCH_DOMAIN`, serves the web build, proxies the rest to the server     |
+| `server`   | REST API, GitHub OAuth and webhooks, dispatcher, agent WebSocket gateway, MCP server        |
+| `postgres` | All state. Internal network only                                                            |
+| `backup`   | Scheduled `pg_dump` with rotation, optional age encryption and S3 upload                    |
+| `agent`    | `ghcr.io/selfhostr/orch-agent`: runs on each member's machine and drives their local Docker |
 
 ## Quick start
 
 Server admin, once. Needs a Linux host with Docker 26+ and Compose, ports 80/443 and a DNS name. Full steps in [Deploy the server](#deploy-the-server).
 
 ```sh
-git clone https://github.com/Theroxat/claude_orch.git && cd claude_orch/deploy/server
+git clone https://github.com/selfhostr/orch.git && cd orch/deploy/server
 cp .env.example .env     # fill it in, then create the GitHub App
 docker compose up -d
 ```
@@ -133,7 +133,7 @@ Copy the App ID and slug, generate a client secret, then generate a private key 
 **4. Start and check.**
 
 ```sh
-docker compose up -d      # pulls ghcr.io/theroxat/orch-server and orch-web (or add --build)
+docker compose up -d      # pulls ghcr.io/selfhostr/orch-server and orch-web (or add --build)
 curl -fsS https://<domain>/healthz     # {"status":"ok"}
 ```
 
@@ -152,7 +152,7 @@ Migrations run on every start. Upgrade with `git pull && docker compose pull && 
 
 Agent settings live in `~/orch/.env` (`ORCH_PLAN` is `pro`, `max5` or `max20`); more options in [`apps/agent/src/config.ts`](apps/agent/src/config.ts).
 
-**Updating agents.** The web app shows a banner when an agent is behind the server's release. **Update now** (or `orch update [--when-idle]`) makes the agent pull exactly `ghcr.io/theroxat/orch-agent:<version>`, switch over through a helper container and roll back on failure. It refuses while tasks run. Manual fallback: `cd ~/orch && docker compose pull && docker compose up -d`.
+**Updating agents.** The web app shows a banner when an agent is behind the server's release. **Update now** (or `orch update [--when-idle]`) makes the agent pull exactly `ghcr.io/selfhostr/orch-agent:<version>`, switch over through a helper container and roll back on failure. It refuses while tasks run. Manual fallback: `cd ~/orch && docker compose pull && docker compose up -d`. Agents from v0.9.0 or older still pull `ghcr.io/theroxat/orch-agent` and must be switched once by hand, see [Updating agents](https://orch.selfhostr.io/docs/members.html#updating-agents).
 
 **Backups.** The `backup` service runs `pg_dump` on `BACKUP_SCHEDULE` (default every day at 03:00 UTC), keeps 7 daily, 4 weekly and 6 monthly dumps, and can encrypt them (age) and upload them to S3-compatible storage. Restore with `deploy/server/backup/restore.sh` (asks for confirmation, stops the server, restores in one transaction, restarts). Keep `.env` (notably `ORCH_ENCRYPTION_KEY`) and the App private key elsewhere: they are not in the dump. See [docs/backups.md](docs/backups.md).
 
@@ -232,7 +232,7 @@ The host needs only `docker` with Compose and `sh`. `./dev` wraps `docker compos
 | `./dev e2e`                            | End-to-end stack                                         |
 | `./dev prisma <args>`                  | Prisma CLI                                               |
 
-The first run copies `.env.example` to `.env`. GitHub sign-in needs a development GitHub App with callback `http://localhost:8470/api/auth/github/callback`. Migrations live in `apps/server/prisma/migrations/` (`YYYYMMDDHHMMSS_snake_name`); applied ones are immutable, never edit or rename them. CI runs lint, typecheck, tests, installer tests, image builds and gitleaks; a `v*` tag publishes `orch-server`, `orch-web` and `orch-agent` to `ghcr.io/theroxat`. Design and decisions: [docs/PLAN.md](docs/PLAN.md).
+The first run copies `.env.example` to `.env`. GitHub sign-in needs a development GitHub App with callback `http://localhost:8470/api/auth/github/callback`. Migrations live in `apps/server/prisma/migrations/` (`YYYYMMDDHHMMSS_snake_name`); applied ones are immutable, never edit or rename them. CI runs lint, typecheck, tests, installer tests, image builds and gitleaks; a `v*` tag publishes `orch-server`, `orch-web` and `orch-agent` to `ghcr.io/selfhostr`. Design and decisions: [docs/PLAN.md](docs/PLAN.md).
 
 ## Limitations
 

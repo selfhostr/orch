@@ -22,11 +22,6 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.serviceworker } },
   },
   {
-    // Landing site scripts served as-is from site/.
-    files: ['site/**/*.js'],
-    languageOptions: { globals: { ...globals.browser } },
-  },
-  {
     files: ['apps/web/**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.browser } },
     plugins: { 'react-hooks': reactHooks },

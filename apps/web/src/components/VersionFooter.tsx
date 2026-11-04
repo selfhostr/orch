@@ -3,7 +3,7 @@ import { normalizeVersion } from '@orch/shared';
 import { z } from 'zod';
 import { api } from '../api/client';
 
-const RELEASES = 'https://github.com/Theroxat/claude_orch/releases/tag';
+const RELEASES = 'https://github.com/selfhostr/orch/releases/tag';
 
 /** Server version from /api/healthz (`dev` for local builds). */
 export const fetchServerVersion = () =>

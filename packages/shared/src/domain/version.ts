@@ -15,7 +15,14 @@ export const ReleaseVersionSchema = z
   .regex(RELEASE_VERSION_RE, 'must be a release version');
 
 /** Default image repository of the agent (registry/namespace/name, no tag). */
-export const DEFAULT_AGENT_IMAGE_REPO = 'ghcr.io/theroxat/orch-agent';
+export const DEFAULT_AGENT_IMAGE_REPO = 'ghcr.io/selfhostr/orch-agent';
+
+/**
+ * Agent image repository before the project moved to the selfhostr organization. Agents up to
+ * LAST_LEGACY_AGENT_VERSION only accept updates from it, and new releases are not published there.
+ */
+export const LEGACY_AGENT_IMAGE_REPO = 'ghcr.io/theroxat/orch-agent';
+export const LAST_LEGACY_AGENT_VERSION = '0.9.0';
 
 /** Image repository reference without tag or digest: `host[:port]/path`, lower case. */
 export const IMAGE_REPO_RE = /^[a-z0-9][a-z0-9.-]*(?::\d{1,5})?(?:\/[a-z0-9][a-z0-9._-]*)+$/;
@@ -81,4 +88,25 @@ export function isOutdated(
   const l = normalizeVersion(latest);
   if (!a || !l) return false;
   return (compareVersions(a, l) ?? 0) < 0;
+}
+
+/**
+ * True when a one-click update of `agentVersion` to `target` from `serverRepo` cannot work: the
+ * agent is a release that still pulls from LEGACY_AGENT_IMAGE_REPO, the target is newer than the
+ * last release published there, and the server offers the default (new) repository. Such an
+ * agent must be switched to the new repository once by hand.
+ */
+export function needsImageMove(
+  agentVersion: string | null | undefined,
+  target: string | null,
+  serverRepo: string,
+): boolean {
+  if (serverRepo !== DEFAULT_AGENT_IMAGE_REPO) return false;
+  const a = normalizeVersion(agentVersion);
+  const t = normalizeVersion(target);
+  if (!a || !t) return false;
+  return (
+    (compareVersions(a, LAST_LEGACY_AGENT_VERSION) ?? 1) <= 0 &&
+    (compareVersions(t, LAST_LEGACY_AGENT_VERSION) ?? 0) > 0
+  );
 }

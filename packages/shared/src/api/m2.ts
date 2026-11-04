@@ -14,7 +14,8 @@
  *   POST   /api/agents/:id/update  { whenIdle? }         -> AgentView (202) (owner only, audited)
  *          Sends `agent.update` with the server-decided image. 409 `agent_offline`,
  *          `update_unsupported` (agent too old for one-click update), `up_to_date`,
- *          `server_version_unknown` (server runs a `dev` build).
+ *          `server_version_unknown` (server runs a `dev` build), `image_moved` (agent still pulls
+ *          the legacy ghcr.io/theroxat repository and must be switched by hand once).
  *   DELETE /api/agents/:id                               204, revokes the credential and closes
  *                                                        the live socket (code 4003)
  *   GET    /install.sh                                   text/x-shellscript, server URL substituted

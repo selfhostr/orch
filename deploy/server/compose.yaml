@@ -17,7 +17,7 @@ x-restart: &restart
 services:
   caddy:
     <<: *restart
-    image: ghcr.io/theroxat/orch-web:${ORCH_VERSION:-latest}
+    image: ghcr.io/selfhostr/orch-web:${ORCH_VERSION:-latest}
     build:
       context: ../..
       dockerfile: docker/web.Dockerfile
@@ -45,7 +45,7 @@ services:
 
   server:
     <<: *restart
-    image: ghcr.io/theroxat/orch-server:${ORCH_VERSION:-latest}
+    image: ghcr.io/selfhostr/orch-server:${ORCH_VERSION:-latest}
     build:
       context: ../..
       dockerfile: docker/server.Dockerfile
