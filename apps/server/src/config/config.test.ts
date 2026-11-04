@@ -68,7 +68,7 @@ describe('agent update settings', () => {
     expect(loadConfig(base).ORCH_VERSION).toBe('dev');
     expect(loadConfig({ ...base, ORCH_VERSION: ' v0.4.3 ' }).ORCH_VERSION).toBe('0.4.3');
     expect(loadConfig({ ...base, ORCH_VERSION: '' }).ORCH_VERSION).toBe('dev');
-    expect(loadConfig(base).ORCH_AGENT_IMAGE_REPO).toBe('ghcr.io/theroxat/orch-agent');
+    expect(loadConfig(base).ORCH_AGENT_IMAGE_REPO).toBe('ghcr.io/selfhostr/orch-agent');
   });
 
   it('rejects an invalid ORCH_AGENT_IMAGE_REPO', () => {

@@ -20,8 +20,8 @@ import { AgentUpdateBanner } from './AgentUpdateBanner';
 import { useOnboarding } from './GettingStarted';
 import { VersionFooter } from './VersionFooter';
 
-const DOCS_URL = 'https://claude-orch.readthedocs.io';
-const REPO_URL = 'https://github.com/Theroxat/claude_orch';
+const DOCS_URL = 'https://orch.selfhostr.io/docs/';
+const REPO_URL = 'https://github.com/selfhostr/orch';
 
 const links: { to: string; label: MessageKey }[] = [
   { to: '/projects', label: 'layout.nav.projects' },

@@ -18,6 +18,8 @@ let app: FastifyInstance;
 let wsUrl: string;
 let devApp: FastifyInstance;
 let devWsUrl: string;
+let nextApp: FastifyInstance;
+let nextWsUrl: string;
 
 async function listen(a: FastifyInstance): Promise<string> {
   await a.listen({ port: 0, host: '127.0.0.1' });
@@ -33,10 +35,14 @@ beforeAll(async () => {
   // Server without a release version: ORCH_VERSION explicitly empty -> 'dev'.
   devApp = makeApp(gh, { env: { ORCH_VERSION: '', ...FAST } });
   devWsUrl = await listen(devApp);
+  // First release published only under ghcr.io/selfhostr.
+  nextApp = makeApp(gh, { env: { ORCH_VERSION: 'v0.10.0', ...FAST } });
+  nextWsUrl = await listen(nextApp);
 });
 afterAll(async () => {
   await app.close();
   await devApp.close();
+  await nextApp.close();
   await prisma.$disconnect();
 });
 
@@ -195,7 +201,7 @@ describe('POST /api/agents/:id/update', () => {
     const msg = await ag.client.next('agent.update');
     expect(msg.payload).toMatchObject({
       targetVersion: '0.4.3',
-      image: 'ghcr.io/theroxat/orch-agent:0.4.3',
+      image: 'ghcr.io/selfhostr/orch-agent:0.4.3',
       whenIdle: true,
     });
     expect(msg.payload.updateId).toMatch(/^upd_/);
@@ -206,7 +212,7 @@ describe('POST /api/agents/:id/update', () => {
     expect(row.data).toEqual({
       fromVersion: '0.4.1',
       targetVersion: '0.4.3',
-      image: 'ghcr.io/theroxat/orch-agent:0.4.3',
+      image: 'ghcr.io/selfhostr/orch-agent:0.4.3',
       whenIdle: true,
     });
     ag.client.close();
@@ -241,6 +247,24 @@ describe('POST /api/agents/:id/update', () => {
     await until(async () => !(await view(app, off.user, off.agentId)).connected);
     const r3 = await post(off.user, off.agentId);
     expect([r3.statusCode, r3.json().error.code]).toEqual([409, 'agent_offline']);
+  });
+
+  it('answers 409 image_moved for agents that still pull the legacy repository', async () => {
+    const old = await online('0.9.0', { server: nextApp, url: nextWsUrl });
+    const r = await post(old.user, old.agentId, undefined, nextApp);
+    expect([r.statusCode, r.json().error.code]).toEqual([409, 'image_moved']);
+    expect(r.json().error.message).toContain('ghcr.io/selfhostr/orch-agent');
+    await new Promise((res) => setTimeout(res, 100));
+    expect(old.client.msgs.some((m) => m.type === 'agent.update')).toBe(false);
+    old.client.close();
+
+    const moved = await online('0.10.0-rc.1', { server: nextApp, url: nextWsUrl });
+    const r2 = await post(moved.user, moved.agentId, undefined, nextApp);
+    expect(r2.statusCode).toBe(202);
+    expect((await moved.client.next('agent.update')).payload.image).toBe(
+      'ghcr.io/selfhostr/orch-agent:0.10.0',
+    );
+    moved.client.close();
   });
 
   it('answers 409 server_version_unknown on a dev server', async () => {

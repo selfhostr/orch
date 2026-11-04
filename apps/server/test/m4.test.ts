@@ -1262,6 +1262,85 @@ describe('github webhooks', () => {
       (await prisma.project.findUniqueOrThrow({ where: { id: p.id } })).archivedAt,
     ).not.toBeNull();
   });
+
+  it('a renamed or transferred repository keeps its project, keyed by repository id', async () => {
+    const { repo, project: p } = await project();
+    const row = () =>
+      prisma.project.findUniqueOrThrow({ where: { id: p.id }, include: { installation: true } });
+    const oldInstallationId = (await row()).installationId;
+
+    const renamed = await hook('repository', {
+      action: 'renamed',
+      installation: { id: repo.installationId },
+      repository: { id: repo.githubRepoId, full_name: `${repo.fullName}-renamed` },
+    });
+    expect(renamed.json()).toMatchObject({ result: 'repository.renamed' });
+    expect(await row()).toMatchObject({
+      fullName: `${repo.fullName}-renamed`,
+      installationId: oldInstallationId,
+    });
+
+    // Transferred to an organization where the App has its own installation.
+    const orgInst = 800_000 + Math.floor(Math.random() * 100_000);
+    const moved = `neworg-${uid()}/moved`;
+    await hook('repository', {
+      action: 'transferred',
+      installation: { id: orgInst, account: { login: 'neworg', type: 'Organization' } },
+      repository: { id: repo.githubRepoId, full_name: moved },
+    });
+    const after = await row();
+    expect(after.fullName).toBe(moved);
+    expect(after.installation.githubInstallationId).toBe(BigInt(orgInst));
+    expect(after.archivedAt).toBeNull();
+
+    // The old installation losing the repository no longer archives the project.
+    await hook('installation_repositories', {
+      action: 'removed',
+      installation: { id: repo.installationId },
+      repositories_removed: [{ id: repo.githubRepoId, full_name: repo.fullName }],
+    });
+    expect((await row()).archivedAt).toBeNull();
+    const audits = await prisma.auditLog.findMany({
+      where: { projectId: p.id, action: 'project.relinked' },
+    });
+    expect(audits).toHaveLength(2);
+  });
+
+  it('a project archived by a lost access is restored when an installation reaches it again', async () => {
+    const { repo, project: p } = await project();
+    await hook('installation_repositories', {
+      action: 'removed',
+      installation: { id: repo.installationId },
+      repositories_removed: [{ id: repo.githubRepoId, full_name: repo.fullName }],
+    });
+    expect(
+      (await prisma.project.findUniqueOrThrow({ where: { id: p.id } })).archivedAt,
+    ).not.toBeNull();
+
+    // The App is installed on the new owner, with this repository among the selected ones.
+    const orgInst = 900_000 + Math.floor(Math.random() * 90_000);
+    const created = await hook('installation', {
+      action: 'created',
+      installation: { id: orgInst, account: { login: 'otherorg', type: 'Organization' } },
+      repositories: [{ id: repo.githubRepoId, full_name: `otherorg-${uid()}/repo` }],
+    });
+    expect(created.json()).toMatchObject({ result: 'installation.upserted' });
+    const restored = await prisma.project.findUniqueOrThrow({
+      where: { id: p.id },
+      include: { installation: true },
+    });
+    expect(restored.archivedAt).toBeNull();
+    expect(restored.installation.githubInstallationId).toBe(BigInt(orgInst));
+
+    // Unknown repositories are ignored.
+    const added = await hook('installation_repositories', {
+      action: 'added',
+      installation: { id: orgInst },
+      repositories_added: [{ id: 1, full_name: 'someone/else' }],
+    });
+    expect(added.statusCode).toBe(200);
+    expect(await prisma.project.findUnique({ where: { fullName: 'someone/else' } })).toBeNull();
+  });
 });
 
 describe('pool endpoint', () => {

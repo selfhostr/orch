@@ -14,6 +14,8 @@ export default {
     dependency_cycle: 'These dependencies would form a cycle.',
     dispatcher_unavailable: 'The dispatcher is not running.',
     github_not_configured: 'The GitHub App is not configured on this server.',
+    image_moved:
+      'This agent still uses the old image (ghcr.io/theroxat). Switch it to ghcr.io/selfhostr once by hand: see Updating agents in the docs.',
     no_agent_online: 'Your machine is offline: start your agent first.',
     not_participating: 'You no longer participate in this project.',
     not_retryable: 'This task cannot be retried.',

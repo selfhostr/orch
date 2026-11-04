@@ -17,9 +17,7 @@ describe('version footer', () => {
     mockApi(routes('0.4.3'));
     renderApp('/projects');
     const link = await screen.findByRole('link', { name: 'orch v0.4.3' });
-    expect(link.getAttribute('href')).toBe(
-      'https://github.com/Theroxat/claude_orch/releases/tag/v0.4.3',
-    );
+    expect(link.getAttribute('href')).toBe('https://github.com/selfhostr/orch/releases/tag/v0.4.3');
   });
 
   it('shows a dev build as plain text, without a link', async () => {

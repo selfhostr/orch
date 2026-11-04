@@ -55,7 +55,7 @@ const EnvSchema = z.object({
     .string()
     .regex(
       IMAGE_REPO_RE,
-      'must be an image repository without tag (e.g. ghcr.io/theroxat/orch-agent)',
+      'must be an image repository without tag (e.g. ghcr.io/selfhostr/orch-agent)',
     )
     .default(DEFAULT_AGENT_IMAGE_REPO),
   /** Set by docker to the container id: used to find the own container for self-update. */

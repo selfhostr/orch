@@ -31,7 +31,9 @@ Set **Members: Read-only** only if you use `ORCH_ALLOWED_GITHUB_ORGS`. orch then
 
 Subscribe to Issues and Pull request, plus the Installation and Installation repositories events that GitHub delivers to every App (`issues`, `pull_request`, `installation`, `installation_repositories`).
 
-Also subscribe to **Member** (collaborator added, removed or changed), **Repository** (made private or public, deleted, transferred) and, if you use organization checks, **Organization** (member removed), **Membership** and **Team** (team members and team repositories; they need the Members organization permission). They are optional: orch uses them to drop its cached repository roles at once instead of waiting for `ORCH_REPO_ACCESS_TTL_SEC` (see {doc}`security`).
+Also subscribe to **Member** (collaborator added, removed or changed), **Repository** (made private or public, renamed, deleted, transferred) and, if you use organization checks, **Organization** (member removed), **Membership** and **Team** (team members and team repositories; they need the Members organization permission). They are optional: orch uses them to drop its cached repository roles at once instead of waiting for `ORCH_REPO_ACCESS_TTL_SEC` (see {doc}`security`).
+
+**Renamed or moved repositories.** Projects are keyed by the GitHub repository id, so a rename or a transfer keeps the project, its tasks and its settings. orch follows the repository when GitHub tells it: a **Repository** `renamed` or `transferred` event, an installation created with the repository, or the repository added to an installation updates the stored `owner/name` and installation, and restores a project that was archived because the App lost access. GitHub sends `transferred` only to the new owner, so install the App on the destination account (with access to the repository) before or right after the transfer. If the App was installed there afterwards and no event reached orch, remove the repository from the App's repository access on the new owner and add it back.
 
 ## After creating the App
 
