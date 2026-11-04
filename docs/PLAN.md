@@ -82,7 +82,7 @@ orch/
 ├── deploy/
 │   ├── server/compose.yaml        # production: caddy, server, postgres (+ backup job)
 │   ├── server/Caddyfile
-│   ├── server/.env.example        # ORCH_DOMAIN=orch.selfhostr.io (example value), secrets placeholders
+│   ├── server/.env.example        # ORCH_DOMAIN=orch-app.selfhostr.io (example value), secrets placeholders
 │   ├── agent/compose.yaml         # template written to ~/orch/compose.yaml by install.sh
 │   ├── agent/.env.example
 │   └── github-app-manifest.json   # one-click GitHub App creation (manifest flow)
@@ -730,7 +730,7 @@ installation token can push to any branch, so branch protection is required. Org
 - **Integration branches (Q14):** subtask PRs target the integration branch. The project owner (its creator) merges ALL PRs: subtask PRs into integration branches and PRs into the default branch. Write-access members do not merge.
 - **PRs (Q15):** manual-mode PRs ready for review, auto-mode PRs draft.
 - **Personal usage (Q16):** opt-in, read-only mount of `~/.claude/projects`.
-- **Hosting (Q17):** single server plus nightly `pg_dump`. The production domain is `orch.selfhostr.io`, set via env (`ORCH_DOMAIN`, used as the `.env.example` and docs example value) and never hardcoded in code.
+- **Hosting (Q17):** single server plus nightly `pg_dump`. The production app domain is `orch-app.selfhostr.io` (the presentation site and docs live at `orch.selfhostr.io`), set via env (`ORCH_DOMAIN`, used as the `.env.example` and docs example value) and never hardcoded in code.
 - **Sign-in allowlist:** logins and/or GitHub orgs, case-insensitive. Org membership is checked at login with the user token (App permission Members: read) and cached for open sessions; the login list is checked on every request. Empty in production = refuse to start.
 - **Language (Q18):** English only, no i18n scaffolding.
 - **License (Q19):** MIT.
