@@ -4,7 +4,7 @@
 
 **How do you hand a teammate's idle Claude capacity a to-do list, without ever sharing an account?**
 
-[**orch.selfhostr.io**](https://orch.selfhostr.io) · [Docs](https://orch.selfhostr.io/docs/) · [Source](https://github.com/selfhostr/orch) · [Design notes](docs/PLAN.md) · [Deploy](#deploy-the-server)
+[**orch.selfhostr.io**](https://orch.selfhostr.io) · [App](https://orch-app.selfhostr.io) · [Docs](https://orch.selfhostr.io/docs/) · [Source](https://github.com/selfhostr/orch) · [Design notes](docs/PLAN.md) · [Deploy](#deploy-the-server)
 
 [![Website](https://img.shields.io/badge/website-orch.selfhostr.io-d97757)](https://orch.selfhostr.io/)
 [![Docs](https://img.shields.io/badge/docs-orch.selfhostr.io%2Fdocs-blue)](https://orch.selfhostr.io/docs/)
@@ -91,7 +91,7 @@ Then run `/mcp`, pick **orch**, **Authenticate**.
 
 ## Deploy the server
 
-**1. DNS.** An `A` (and optionally `AAAA`) record for your domain, for example `orch.selfhostr.io`. It must resolve before the first start: Caddy requests the Let's Encrypt certificate then.
+**1. DNS.** An `A` (and optionally `AAAA`) record for your domain, for example `orch-app.selfhostr.io`. It must resolve before the first start: Caddy requests the Let's Encrypt certificate then.
 
 **2. Configure.** In `deploy/server`, copy `.env.example` to `.env` and generate the secrets:
 
@@ -162,12 +162,12 @@ Agent settings live in `~/orch/.env` (`ORCH_PLAN` is `pro`, `max5` or `max20`); 
 Cloudflare terminates TLS and `cloudflared` forwards plain HTTP to a local port; ports 80/443 are not used. In `.env`:
 
 ```sh
-ORCH_DOMAIN=orch.selfhostr.io
+ORCH_DOMAIN=orch-app.selfhostr.io
 ORCH_TLS_MODE=tunnel                      # default is acme
 HTTP_PORT=8495                            # local port cloudflared connects to
 ORCH_BIND_ADDR=127.0.0.1                  # keep the port off the LAN
 HTTPS_PUBLISH=127.0.0.1:                  # nothing serves 443
-ORCH_PUBLIC_URL=https://orch.selfhostr.io # always https
+ORCH_PUBLIC_URL=https://orch-app.selfhostr.io # always https
 ```
 
 Point `cloudflared` ingress at `http://localhost:8495`. If it runs in Docker in another Compose project, use `deploy/server/compose.cloudflared.yaml` (`docker compose -f compose.yaml -f compose.cloudflared.yaml up -d`, service URL `http://orch-caddy:80`; Compose 2.24+). If `cloudflared` reaches the port from another host, set `ORCH_BIND_ADDR=0.0.0.0` and firewall the port so only it can connect, otherwise anyone could forge `X-Forwarded-For`.
