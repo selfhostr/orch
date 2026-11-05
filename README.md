@@ -4,11 +4,6 @@
 
 <h3>A shared to-do list for small, trusted teams, run on each member's own Claude subscription.</h3>
 
-<a href="https://orch.selfhostr.io"><img src="https://raw.githubusercontent.com/selfhostr/.github/main/profile/assets/btn-site.svg" alt="Website" height="40"></a>
-<a href="https://orch.selfhostr.io/docs/"><img src="https://raw.githubusercontent.com/selfhostr/.github/main/profile/assets/btn-docs.svg" alt="Documentation" height="40"></a>
-<a href="https://orch.selfhostr.io/demo/"><img src="https://raw.githubusercontent.com/selfhostr/.github/main/profile/assets/btn-demo.svg" alt="Live demo" height="40"></a>
-<a href="https://github.com/selfhostr/orch/releases"><img src="https://raw.githubusercontent.com/selfhostr/.github/main/profile/assets/btn-releases.svg" alt="Releases" height="40"></a>
-
 <br><br>
 
 [![CI](https://github.com/selfhostr/orch/actions/workflows/ci.yml/badge.svg)](https://github.com/selfhostr/orch/actions/workflows/ci.yml)
@@ -30,6 +25,8 @@ Tasks are GitHub issues. A member, or Claude Code through MCP, adds them to a sh
 - **Free, for good.** MIT licence, no paid edition.
 
 ## Quick start
+
+Try the [live demo](https://orch.selfhostr.io/demo/) first.
 
 Server admin, once. You need a Linux host with Docker 26+ and Compose, ports 80 and 443, and a DNS name.
 
