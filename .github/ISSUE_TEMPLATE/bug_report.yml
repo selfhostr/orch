@@ -1,0 +1,59 @@
+name: Bug report
+description: Something does not work as described.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security problems go to
+        https://github.com/selfhostr/orch/security/advisories/new instead, not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+      placeholder: |
+        1. Added a repository
+        2. Created a task in the backlog
+        3. Expected an offer to a member; got "Why isn't this running?"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Server version (footer of the web app) and agent version (`orch status`), or a commit.
+      placeholder: server 0.9.1, agent 0.9.1
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Server
+        - Web app
+        - Agent
+        - Installer (install.sh)
+        - CLI (orch)
+        - MCP
+        - Task sandbox / compose guard
+        - Notifications
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        `docker compose logs --tail=200 <service>`, or `orch doctor` for an agent.
+        Redact tokens, keys and private repository names.
+      render: text
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Host OS and architecture, Docker version, browser if the web app is involved.
