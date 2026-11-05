@@ -1,7 +1,7 @@
 name: Feature request
 description: Suggest something orch should do.
-title: "[feat] "
-labels: ["enhancement"]
+title: '[feat] '
+labels: ['enhancement']
 body:
   - type: textarea
     id: problem
