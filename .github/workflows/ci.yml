@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # Everything runs through ./dev, which only calls `docker compose` (no host node/pnpm).
@@ -42,11 +42,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # pnpm store (repo-local, see docker/tools.Dockerfile): `pnpm install` becomes a link step.
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .pnpm-store
           key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -58,7 +58,7 @@ jobs:
         run: ./dev test:ui
       - name: Upload screenshots and report
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ui-test-output
           path: |
@@ -87,7 +87,7 @@ jobs:
           - image: agent
             file: apps/agent/Dockerfile
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Validate the production compose file
@@ -96,9 +96,9 @@ jobs:
           cp deploy/server/.env.example deploy/server/.env
           sed -i 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-placeholder/; s/^ORCH_ENCRYPTION_KEY=$/ORCH_ENCRYPTION_KEY=ci-placeholder/' deploy/server/.env
           docker compose -f deploy/server/compose.yaml config --quiet
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build the image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ${{ matrix.file }}
@@ -134,12 +134,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Scan the full history
         run: |
           docker run --rm -v "$PWD:/repo" -w /repo \
-            ghcr.io/gitleaks/gitleaks:v8.21.2 \
+            ghcr.io/gitleaks/gitleaks:v8.21.2@sha256:0e99e8821643ea5b235718642b93bb32486af9c8162c8b8731f7cbdc951a7f46 \
             detect --source . --redact --verbose --no-banner
