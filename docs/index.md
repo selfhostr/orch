@@ -1,10 +1,5 @@
 # orch
 
-```{image} screenshot-backlog.png
-:alt: The Backlog: tasks by status, each one a GitHub issue
-:width: 100%
-```
-
 orch is a shared to-do list for small, trusted teams, with automation on top.
 
 - Tasks are GitHub issues. A team member (or Claude Code, through MCP) adds them to a shared pool.
