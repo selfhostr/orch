@@ -10,8 +10,6 @@
 
 </div>
 
-Screenshots: [screenshots/](screenshots/)
-
 ## Overview
 
 Tasks are GitHub issues. A member, or Claude Code through MCP, adds them to a shared pool. Each task then runs on a teammate's own machine, with their own Claude subscription, in a throwaway container that only sees its own git clone. orch pushes a branch and opens a PR.
