@@ -88,7 +88,7 @@ Releases are `0.x`, so anything may change between minor versions. The [installa
 
 ## Contributing
 
-Everything runs in Docker; the host needs only `docker` with Compose and `sh`. Start with the [development guide](docs/development.md) (`./dev up`, `./dev test`). Security issues: [SECURITY.md](SECURITY.md).
+Everything runs in Docker; the host needs only `docker` with Compose and `sh`. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [development guide](docs/development.md) (`./dev up`, `./dev test`). Security issues: [SECURITY.md](SECURITY.md).
 
 ## License
 
