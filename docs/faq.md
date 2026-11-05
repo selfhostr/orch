@@ -1,4 +1,6 @@
-# FAQ and troubleshooting
+# Troubleshoot and FAQ
+
+Fixes for the problems people hit most often, with the exact symptom as the title.
 
 ## The server does not start in production
 

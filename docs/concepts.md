@@ -1,5 +1,7 @@
 # Concepts
 
+By the end, you know how projects, the pool, budgets and task dispatch fit together.
+
 ## Projects
 
 A **project** is a GitHub repository registered in orch by its owner (the App must be installed on it). Issues carrying the project's pool label (default `pool`) become tasks. Members discover projects on the **Discover** page and join them. Private projects require the owner's approval by default.

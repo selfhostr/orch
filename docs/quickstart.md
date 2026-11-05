@@ -1,4 +1,4 @@
-# Quickstart
+# Quick start
 
 The shortest path from nothing to a first task. Each step links to the full page.
 

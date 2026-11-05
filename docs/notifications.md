@@ -1,4 +1,4 @@
-# Notifications
+# Set up notifications
 
 orch tells you when something needs you: a task you created is merged or fails, a PR waits for review, a task is offered to you, or someone asks to join your pool or your server. Notifications show up in the app (the bell in the header) and, if you want, in your browser, in Slack, Discord, any JSON webhook or by e-mail.
 
