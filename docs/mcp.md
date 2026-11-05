@@ -1,4 +1,4 @@
-# Claude Code and MCP
+# Connect Claude Code (MCP)
 
 orch exposes an MCP server so Claude Code can see the pool and submit work. The server needs no LLM key: your own Claude Code does the planning.
 

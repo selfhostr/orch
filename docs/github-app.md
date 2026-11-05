@@ -1,4 +1,4 @@
-# Creating the GitHub App
+# Create the GitHub App
 
 orch signs users in with GitHub and acts on repositories through one GitHub App that you own. Create it at **GitHub -> Settings -> Developer settings -> GitHub Apps -> New GitHub App** (or under your organization's settings). Replace `<domain>` with your `ORCH_DOMAIN`.
 

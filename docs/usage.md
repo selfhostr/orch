@@ -1,4 +1,6 @@
-# Day-to-day usage
+# Use orch day to day
+
+By the end, you know how to run, follow and review tasks from the web app and the agent.
 
 ## Web
 

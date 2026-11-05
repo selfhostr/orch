@@ -1,3 +1,7 @@
+---
+orphan: true
+---
+
 # orch: Implementation Plan
 
 Status: **Approved, 2026-10-21.**

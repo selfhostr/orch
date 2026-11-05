@@ -1,4 +1,6 @@
-# Adding a member and the agent
+# Add a member and install the agent
+
+By the end, a teammate can sign in, join a project and has an agent connected to your server.
 
 ## Adding a member
 
