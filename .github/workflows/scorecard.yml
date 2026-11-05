@@ -10,7 +10,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "29 5 * * 1"
+    - cron: '29 5 * * 1'
   # Re-scores Branch-Protection as soon as the rules change.
   branch_protection_rule:
   workflow_dispatch:

@@ -9,11 +9,11 @@ updates:
       interval: weekly
     groups:
       npm-minor:
-        update-types: ["minor", "patch"]
+        update-types: ['minor', 'patch']
     ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-    labels: ["dependencies"]
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+    labels: ['dependencies']
 
   - package-ecosystem: npm
     directory: /test/ui
@@ -21,11 +21,11 @@ updates:
       interval: weekly
     groups:
       npm-test-ui:
-        update-types: ["minor", "patch"]
+        update-types: ['minor', 'patch']
     ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-    labels: ["dependencies"]
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+    labels: ['dependencies']
 
   - package-ecosystem: docker
     directories:
@@ -39,8 +39,8 @@ updates:
       interval: weekly
     groups:
       docker-images:
-        patterns: ["*"]
-    labels: ["dependencies", "docker"]
+        patterns: ['*']
+    labels: ['dependencies', 'docker']
 
   - package-ecosystem: docker-compose
     directories:
@@ -54,8 +54,8 @@ updates:
       interval: weekly
     groups:
       compose-images:
-        patterns: ["*"]
-    labels: ["dependencies", "docker"]
+        patterns: ['*']
+    labels: ['dependencies', 'docker']
 
   - package-ecosystem: github-actions
     directory: /
@@ -63,5 +63,5 @@ updates:
       interval: weekly
     groups:
       github-actions:
-        patterns: ["*"]
-    labels: ["dependencies", "ci"]
+        patterns: ['*']
+    labels: ['dependencies', 'ci']
