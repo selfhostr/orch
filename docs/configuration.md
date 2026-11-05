@@ -1,5 +1,7 @@
 # Configuration reference
 
+Every environment variable and its default, for the server, the agent and development.
+
 (server-env)=
 
 ## Server environment (`deploy/server/.env`)

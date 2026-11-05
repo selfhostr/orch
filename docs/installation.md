@@ -1,4 +1,4 @@
-# Server installation
+# Install the server
 
 Requirements: a Linux host with Docker Engine 26+ and the Compose plugin, ports 80 and 443 reachable from the internet, and a DNS name.
 
