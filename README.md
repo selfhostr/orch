@@ -4,17 +4,13 @@
 
 <h3>A shared to-do list for small, trusted teams, run on each member's own Claude subscription.</h3>
 
-<br><br>
-
 [![CI](https://github.com/selfhostr/orch/actions/workflows/ci.yml/badge.svg)](https://github.com/selfhostr/orch/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/selfhostr/orch/badge)](https://scorecard.dev/viewer/?uri=github.com/selfhostr/orch)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-<br><br>
-
-<img src="docs/screenshot-backlog.png" alt="The Backlog: tasks by status, each one a GitHub issue" width="100%">
-
 </div>
+
+Screenshots: [screenshots/](screenshots/)
 
 ## Overview
 
