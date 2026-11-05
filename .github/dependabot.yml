@@ -1,0 +1,67 @@
+version: 2
+# renovate.json is kept, but no Renovate pull request exists in this repository:
+# Dependabot is what opens the update PRs (and pins new action versions by SHA).
+updates:
+  - package-ecosystem: npm
+    # pnpm workspace: the lockfile at the root covers apps/* and packages/*.
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor:
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    labels: ["dependencies"]
+
+  - package-ecosystem: npm
+    directory: /test/ui
+    schedule:
+      interval: weekly
+    groups:
+      npm-test-ui:
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    labels: ["dependencies"]
+
+  - package-ecosystem: docker
+    directories:
+      - /apps/agent
+      - /docker
+      - /deploy/server/backup
+      - /test/e2e/fake-github
+      - /test/e2e/fixture-repo
+      - /test/e2e/runner
+    schedule:
+      interval: weekly
+    groups:
+      docker-images:
+        patterns: ["*"]
+    labels: ["dependencies", "docker"]
+
+  - package-ecosystem: docker-compose
+    directories:
+      - /
+      - /deploy/agent
+      - /deploy/observability
+      - /deploy/server
+      - /test/ui
+      - /test/e2e/fixture-repo
+    schedule:
+      interval: weekly
+    groups:
+      compose-images:
+        patterns: ["*"]
+    labels: ["dependencies", "docker"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+    labels: ["dependencies", "ci"]

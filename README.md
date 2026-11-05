@@ -13,6 +13,7 @@
 ![Docker](https://img.shields.io/badge/everything%20in-Docker-2496ed?logo=docker&logoColor=white)
 ![Claude creds](https://img.shields.io/badge/Claude%20credentials-stay%20local-blue)
 ![License MIT](https://img.shields.io/badge/license-MIT-lightgrey)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/selfhostr/orch/badge)](https://scorecard.dev/viewer/?uri=github.com/selfhostr/orch)
 
 </div>
 
