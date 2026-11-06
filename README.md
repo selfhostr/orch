@@ -2,9 +2,7 @@
 
 <a href="https://orch.selfhostr.io"><img src=".github/assets/banner.svg" alt="orch: A shared to-do list that turns into pull requests." width="100%"></a>
 
-<h3>A shared to-do list for small, trusted teams, run on each member's own Claude subscription.</h3>
-
-<br><br>
+<h3>A shared to-do list for teams who trust each other, run on each member's own Claude subscription.</h3>
 
 [![CI](https://github.com/selfhostr/orch/actions/workflows/ci.yml/badge.svg)](https://github.com/selfhostr/orch/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/selfhostr/orch/badge)](https://scorecard.dev/viewer/?uri=github.com/selfhostr/orch)
@@ -70,7 +68,7 @@ Caddy (automatic HTTPS, static web build) fronts a Fastify server with Postgres;
 
 ## Limits
 
-orch is for **small teams who trust each other**. It is a shared to-do list with automation, not a multi-tenant platform.
+orch is for **teams who trust each other**. It is a shared to-do list with automation, not a multi-tenant platform.
 
 > [!WARNING]
 > Anyone who can get an issue labeled for the pool can, in effect, write a prompt that runs on a teammate's machine. Do not use orch with strangers or public repos where outsiders can file labeled issues.
@@ -98,4 +96,4 @@ MIT, see [LICENSE](LICENSE). orch is provided "as is", without warranty of any k
 
 orch is free and has no company behind it. If it saves you time, you can support its development:
 
-- **GitHub Sponsors** (recurring or one-off): [github.com/sponsors/selfhostr](https://github.com/sponsors/selfhostr)
+[Sponsor us on GitHub](https://github.com/sponsors/selfhostr), recurring or one-off.

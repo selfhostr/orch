@@ -39,6 +39,10 @@ Add tests for any behaviour you change. A bug fix comes with a regression test t
 
 The [development guide](docs/development.md) covers migrations, the dev agent, CI, dependency updates, documentation and translations in detail.
 
+## Developer Certificate of Origin
+
+Every commit must be signed off to certify the [Developer Certificate of Origin](https://developercertificate.org/): commit with `git commit -s`, which adds a `Signed-off-by: Your Name <you@example.com>` line.
+
 ## Licence
 
 By contributing you agree that your contribution is released under the [MIT licence](LICENSE).
