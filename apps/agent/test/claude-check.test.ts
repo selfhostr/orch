@@ -466,7 +466,7 @@ describe('orch doctor', () => {
     expect(text).toContain('Claude binary:  /opt/orch/bin/claude (2.1.0 (Claude Code))');
     expect(text).toContain('Token:          present');
     expect(text).toContain('Token shape:    ok (107 chars, sk-ant-oat prefix)');
-    expect(text).toContain('✓ Claude login verified');
+    expect(text).toContain('OK: Claude login verified');
     expect(text).not.toContain('FAKE');
   });
 
@@ -480,7 +480,7 @@ describe('orch doctor', () => {
     const lines: string[] = [];
     expect(await doctor(c, deps(), (s) => lines.push(s))).toBe(1);
     expect(lines.join('\n')).toContain('Token shape:    unexpected: too short');
-    expect(lines.at(-1)).toBe('✗ Claude rejected this token (401). Run `orch login` again.');
+    expect(lines.at(-1)).toBe('Error: Claude rejected this token (401). Run `orch login` again.');
     expect(
       checkLine({
         valid: false,
@@ -522,7 +522,7 @@ describe('orch doctor', () => {
       deps(),
     );
     expect(code).toBe(0);
-    expect(out.join('')).toContain('✓ Claude login verified');
+    expect(out.join('')).toContain('OK: Claude login verified');
   });
 });
 
