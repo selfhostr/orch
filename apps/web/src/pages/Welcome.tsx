@@ -91,9 +91,7 @@ function Status({
   return (
     <p className={`wizard-status ${done ? 'ok' : ''}`} role="status" aria-live="polite">
       {done ? (
-        <>
-          {children}
-        </>
+        <>{children}</>
       ) : (
         <>
           <span className="spinner" aria-hidden="true" /> {waiting}
