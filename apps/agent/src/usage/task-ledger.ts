@@ -1,5 +1,5 @@
 /**
- * Ledger of the Claude usage of orch task runs (an ESTIMATE, PLAN 5.7).
+ * Ledger of the Claude usage of orch task runs (an ESTIMATE).
  *
  * Task containers log to their own tmpfs config dir (`/tmp/.claude`), which the usage loop never
  * sees (it scans the member's host `~/.claude`). The executor records each run's usage entries

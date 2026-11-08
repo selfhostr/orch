@@ -1,5 +1,5 @@
 /**
- * `orch login` (PLAN 5.4): runs `claude setup-token` so the member creates a long-lived OAuth
+ * `orch login`: runs `claude setup-token` so the member creates a long-lived OAuth
  * token for their own subscription, then captures the token it prints (read from a pty and
  * replayed into a terminal emulator; failing that, asked as a hidden paste), checks its shape and
  * stores it in `${ORCH_SECRETS_DIR}/claude-token` (0600, atomic). orch itself never prints or

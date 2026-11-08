@@ -91,9 +91,7 @@ function Status({
   return (
     <p className={`wizard-status ${done ? 'ok' : ''}`} role="status" aria-live="polite">
       {done ? (
-        <>
-          <span aria-hidden="true">✓</span> {children}
-        </>
+        <>{children}</>
       ) : (
         <>
           <span className="spinner" aria-hidden="true" /> {waiting}
@@ -114,7 +112,7 @@ function RepoScreen({ done }: { done: boolean }) {
   return done ? (
     <>
       <p className="wizard-status ok" role="status" aria-live="polite">
-        <span aria-hidden="true">✓</span> {t('welcome.wizard.repo.already')}
+        {t('welcome.wizard.repo.already')}
       </p>
       {first && (
         <OwnerParticipation
@@ -239,7 +237,7 @@ function DoneScreen({ states }: { states: Map<OnboardingStepId, boolean> }) {
               }
               className={states.get(id) ? 'ok' : ''}
             >
-              {states.get(id) ? '✓' : '○'}
+              {states.get(id) ? 'OK' : '·'}
             </span>{' '}
             {t(label)}
           </li>
@@ -401,7 +399,7 @@ export function Welcome() {
             <p className="wizard-explain">{t(EXPLAIN[screen])}</p>
             {screen === 'join' && done && (
               <p className="wizard-status ok" role="status">
-                <span aria-hidden="true">✓</span> {t('welcome.wizard.alreadyDone')}
+                {t('welcome.wizard.alreadyDone')}
               </p>
             )}
 

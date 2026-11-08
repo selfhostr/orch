@@ -1,5 +1,5 @@
 /**
- * WebSocket connection to the server (PLAN 4.2, 4.5): Bearer auth, `hello` on open, reconnect
+ * WebSocket connection to the server: Bearer auth, `hello` on open, reconnect
  * with full-jitter backoff (reset after `welcome`), every inbound frame validated with
  * `parseServerMessage`. Delivery semantics (acks, outbox, dedupe) live in the Agent.
  */

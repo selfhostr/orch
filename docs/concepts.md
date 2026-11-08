@@ -1,5 +1,7 @@
 # Concepts
 
+By the end, you know how projects, the pool, budgets and task dispatch fit together.
+
 ## Projects
 
 A **project** is a GitHub repository registered in orch by its owner (the App must be installed on it). Issues carrying the project's pool label (default `pool`) become tasks. Members discover projects on the **Discover** page and join them. Private projects require the owner's approval by default.
@@ -95,5 +97,3 @@ The task image comes from the repository's `Dockerfile` or a simple `.devcontain
 ### The compose guard
 
 When a task uses the repository's own `compose.yaml` for its sidecars, the agent validates it before starting anything, with allowlists of keys and values on the fully resolved model: host bind mounts, the Docker socket, host or foreign namespaces and networks, privileges, devices, extra capabilities, out-of-repository builds, secrets and includes are refused with an error naming the key. It then runs a hardened copy: no published ports, all capabilities dropped but a harmless baseline, `no-new-privileges`, and capped memory, CPU and pids. The full list is in {ref}`compose-guard`.
-
-For the complete design see {doc}`PLAN`.

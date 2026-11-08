@@ -1,5 +1,5 @@
 /**
- * Installation token broker (PLAN 5.5): `token.request` -> `token.grant` / `token.deny`.
+ * Installation token broker: `token.request` -> `token.grant` / `token.deny`.
  * Grants are held only in memory by the caller for one git operation, never persisted or logged.
  */
 import { agentMessage, newMessageId, type AgentMessage, type ServerMessage } from '@orch/shared';

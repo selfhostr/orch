@@ -359,12 +359,12 @@ export async function checkClaudeAuth(
 /** Human line for `orch doctor` / `orch login`. */
 export function checkLine(p: ClaudeAuthPayload): string {
   if (p.valid && p.errorClass === 'rate_limited') {
-    return '✓ Claude login verified (the account is rate limited right now)';
+    return 'OK: Claude login verified (the account is rate limited right now)';
   }
-  if (p.valid) return '✓ Claude login verified';
+  if (p.valid) return 'OK: Claude login verified';
   if (p.errorClass === 'unauthorized') {
-    return '✗ Claude rejected this token (401). Run `orch login` again.';
+    return 'Error: Claude rejected this token (401). Run `orch login` again.';
   }
-  if (p.errorClass === 'no_token') return '✗ No Claude token stored. Run `orch login`.';
+  if (p.errorClass === 'no_token') return 'Error: No Claude token stored. Run `orch login`.';
   return `? Could not verify the Claude login (${p.errorClass ?? 'error'}): ${p.detail ?? 'no detail'}`;
 }

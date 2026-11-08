@@ -1,9 +1,9 @@
 /**
- * Auto mode (PLAN 5.6): headless `claude -p` inside the task container through `docker exec`.
+ * Auto mode: headless `claude -p` inside the task container through `docker exec`.
  *
  * The prompt goes through stdin (never argv, never the clone). Output is stream-json: every line
  * is appended (redacted) to the run log, and the final `result` event gives the outcome and the
- * per-task usage. Bypassed permissions are acceptable only because of the sandbox (PLAN 5.3).
+ * per-task usage. Bypassed permissions are acceptable only because of the sandbox.
  */
 import { spawn } from 'node:child_process';
 import type { TaskSize } from '@orch/shared';
@@ -12,7 +12,7 @@ import { childEnv } from './runner';
 /** `--max-turns` by task size. */
 export const MAX_TURNS: Record<TaskSize, number> = { S: 100, M: 200, L: 300 };
 
-/** Hard timeout by size when the offer carries none (PLAN 10: 30/90/180 min). */
+/** Hard timeout by size when the offer carries none. */
 export const DEFAULT_TIMEOUT_SEC: Record<TaskSize, number> = { S: 1800, M: 5400, L: 10800 };
 
 export interface AutoArgvSpec {

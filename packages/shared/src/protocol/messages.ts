@@ -1,5 +1,5 @@
 /**
- * Server <-> agent message types (PLAN section 4.4). Both sides validate every frame with these.
+ * Server <-> agent message types. Both sides validate every frame with these.
  * Task-related messages (offer, claim, status, token...) are defined now and used from M3/M4.
  */
 import { z } from 'zod';
@@ -93,7 +93,7 @@ export const HeartbeatPayloadSchema = z.object({
 });
 export type HeartbeatPayload = z.infer<typeof HeartbeatPayloadSchema>;
 
-/** All figures are ESTIMATES from local logs (PLAN 5.7, R2). */
+/** All figures are ESTIMATES from local logs. */
 export const UsageReportPayloadSchema = z.object({
   estimate: z.literal(true),
   /** Null when no 5-hour block is active. */

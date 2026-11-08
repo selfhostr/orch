@@ -26,6 +26,8 @@ flowchart TB
 
 Members never open an inbound port: the agent connects out to the server over a WebSocket.
 
+Start with the {doc}`quickstart`, the full {doc}`installation`, or the {doc}`concepts` behind the pool.
+
 ```{toctree}
 :maxdepth: 2
 :caption: Get started
@@ -33,18 +35,17 @@ Members never open an inbound port: the agent connects out to the server over a 
 quickstart
 installation
 github-app
-backups
 members
+backups
 ```
 
 ```{toctree}
 :maxdepth: 2
-:caption: Using orch
+:caption: Using it
 
 concepts
 usage
 notifications
-cli
 mcp
 ```
 
@@ -53,15 +54,27 @@ mcp
 :caption: Reference
 
 configuration
+cli
 observability
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Security
+
 security
 ```
 
 ```{toctree}
 :maxdepth: 2
-:caption: Project
+:caption: Operations
+
+faq
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Development
 
 development
-faq
-PLAN
 ```

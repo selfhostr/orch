@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://orch.selfhostr.io/docs/
+    about: Installation, concepts, CLI, MCP, configuration and the security model.
+  - name: Security issue
+    url: https://github.com/selfhostr/orch/security/advisories/new
+    about: Report privately; never in a public issue.

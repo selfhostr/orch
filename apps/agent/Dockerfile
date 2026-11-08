@@ -1,12 +1,12 @@
 # orch agent image (member machine). Build context = repository root:
 #   docker build -f apps/agent/Dockerfile -t orch-agent .
 #
-# Runs as root: the agent holds the host Docker socket (root-equivalent, PLAN R5), owns
-# /run/orch.sock and the /data and /secrets volumes. Task containers are non-root (PLAN 5.3).
+# Runs as root: the agent holds the host Docker socket (root-equivalent), owns
+# /run/orch.sock and the /data and /secrets volumes. Task containers are non-root.
 FROM docker:28-cli AS docker-cli
 
 # ---- deps: production dependencies only. Built in parallel with the runtime stage below. ----
-FROM node:25-bookworm-slim AS deps
+FROM node:24-bookworm-slim AS deps
 ENV COREPACK_HOME=/opt/corepack \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     CI=true
@@ -18,19 +18,19 @@ COPY apps/agent/package.json apps/agent/
 RUN pnpm install --frozen-lockfile --prod --filter "@orch/agent..."
 
 # ---- runtime ----
-FROM node:25-bookworm-slim
+FROM node:24-bookworm-slim
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git screen ca-certificates curl tini \
  && rm -rf /var/lib/apt/lists/*
 
 # Docker CLI + buildx and compose plugins, used to drive task containers through the host daemon.
-# buildx is required: task images are built with BuildKit (DOCKER_BUILDKIT=1, PLAN 5.2).
+# buildx is required: task images are built with BuildKit (DOCKER_BUILDKIT=1).
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
 
-# Claude Code CLI (native installer), copied to /opt/orch/bin/claude (PLAN 5.6) so it can be
+# Claude Code CLI (native installer), copied to /opt/orch/bin/claude so it can be
 # mounted read-only into task containers later. Auto-updates are disabled: the image pins it.
 ENV DISABLE_AUTOUPDATER=1
 RUN curl -fsSL https://claude.ai/install.sh | bash \

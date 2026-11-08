@@ -1,5 +1,5 @@
 /**
- * Persistent outbox for acked agent -> server messages (PLAN 4.3, 4.5).
+ * Persistent outbox for acked agent -> server messages.
  *
  * - `enqueue` assigns an id and a monotonic seq and persists BEFORE trying to send.
  * - `setOnline(true)` (after `welcome`) replays every pending entry in seq order with its ORIGINAL id.
