@@ -11,8 +11,8 @@
     "i18n:check": "node scripts/check-i18n.ts"
   },
   "dependencies": {
-    "@fontsource-variable/overpass": "^5.3.0",
-    "@fontsource-variable/overpass-mono": "^5.3.0",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@orch/shared": "workspace:*",
     "@tanstack/react-query": "^5.105.1",
     "react": "^19.3.1",

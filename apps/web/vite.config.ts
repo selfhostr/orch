@@ -47,6 +47,8 @@ export default defineConfig({
       },
     }),
   ],
+  // Fonts stay real files: the CSP is font-src 'self', which refuses the data: URIs Vite would inline for small woff2.
+  build: { assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined) },
   server: { host: '0.0.0.0', port: 5173, strictPort: true, allowedHosts: true },
   test: {
     environment: 'jsdom',
