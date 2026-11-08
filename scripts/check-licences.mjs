@@ -12,6 +12,7 @@ const ALLOWED = new Set([
   'BSD-3-Clause',
   'ISC',
   'MPL-2.0',
+  'EPL-2.0',
   'OFL-1.1',
   'CC0-1.0',
   'Unlicense',
