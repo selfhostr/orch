@@ -3,7 +3,7 @@
 #
 # Runs as root: the agent holds the host Docker socket (root-equivalent), owns
 # /run/orch.sock and the /data and /secrets volumes. Task containers are non-root.
-FROM docker:27-cli AS docker-cli
+FROM docker:28-cli AS docker-cli
 
 # ---- deps: production dependencies only. Built in parallel with the runtime stage below. ----
 FROM node:24-bookworm-slim AS deps
