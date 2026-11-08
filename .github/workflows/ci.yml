@@ -37,6 +37,21 @@ jobs:
       - name: Backup integration (throwaway Postgres, backup, restore)
         run: ./dev test:backup
 
+  licences:
+    name: Licences (OSI allow-list)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Every package of every workspace (dev tools included) must carry an OSI licence:
+      # scripts/check-licences.mjs reads the installed pnpm store.
+      - name: Install dependencies
+        run: ./dev build-tools && ./dev pnpm install --frozen-lockfile
+      - name: Check licences
+        run: ./dev pnpm licences
+
   ui:
     name: Browser UI tests (Playwright, Docker)
     runs-on: ubuntu-latest

@@ -2,6 +2,13 @@
 
 All notable changes to orch. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions are `0.MINOR.PATCH` until 1.0. The full notes of each release are on the [releases page](https://github.com/selfhostr/orch/releases).
 
+## Unreleased
+
+### Added
+
+- A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm licences`).
+- The README states that the agent image installs Claude Code, which is proprietary software from Anthropic, and that orch itself is MIT.
+
 ## 0.9.1 - 2026-11-04
 
 ### Changed
