@@ -1,5 +1,5 @@
 /**
- * Manual-mode sessions (PLAN 5.6): a detached `screen` session inside the agent container runs
+ * Manual-mode sessions: a detached `screen` session inside the agent container runs
  * `docker exec -it <task> claude ...`. The member attaches with
  * `orch attach <n>` (host shortcut that forwards to the agent container).
  */

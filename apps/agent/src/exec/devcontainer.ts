@@ -1,5 +1,5 @@
 /**
- * Dev environment selection (PLAN 5.2): `.devcontainer/devcontainer.json` (or `.devcontainer.json`)
+ * Dev environment selection: `.devcontainer/devcontainer.json` (or `.devcontainer.json`)
  * -> root `Dockerfile` -> the default image. Only simple devcontainer keys are honored; the rest
  * are ignored with a warning. This is not a sanitizer: `sandbox.ts` always builds the container
  * spec itself, so nothing here can add mounts, capabilities or privileges.
@@ -206,7 +206,7 @@ export function fromDevcontainer(clone: string, file: string): DevEnv {
   throw new DevEnvError('devcontainer.json has neither "image" nor "build.dockerfile"');
 }
 
-/** PLAN 5.2 precedence. `defaultImage` is used when the repo defines nothing. */
+/** Precedence order. `defaultImage` is used when the repo defines nothing. */
 export function selectDevEnv(clone: string, defaultImage: string): DevEnv {
   for (const rel of ['.devcontainer/devcontainer.json', '.devcontainer.json']) {
     const f = repoFile(clone, rel, 'devcontainer');

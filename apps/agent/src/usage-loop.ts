@@ -1,5 +1,5 @@
 /**
- * Periodic usage report (PLAN 5.7): estimate from local Claude Code logs, mapped to the
+ * Periodic usage report: estimate from local Claude Code logs, mapped to the
  * `usage.report` payload and handed to `onReport` (the outbox, so delivery is at-least-once).
  */
 import type { UsageReportPayload } from '@orch/shared';

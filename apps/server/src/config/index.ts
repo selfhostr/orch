@@ -204,14 +204,14 @@ const ConfigSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   DISPATCHER_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
-  /** PENDING auto offers expire after this (PLAN 4.5: 60 s). */
+  /** PENDING auto offers expire after this. */
   AUTO_OFFER_TTL_SEC: z.coerce.number().int().positive().default(60),
-  /** PENDING consent requests expire after this (PLAN 4.5: 30 min). */
+  /** PENDING consent requests expire after this. */
   CONSENT_REQUEST_TTL_SEC: z.coerce.number().int().positive().default(1_800),
   /** A usage report older than this makes the member ineligible for auto offers. */
   USAGE_STALE_SEC: z.coerce.number().int().positive().default(900),
   /**
-   * EXTRA safety reserve applied by the server. The safety reserve s of PLAN section 6 (20 %) is
+   * EXTRA safety reserve applied by the server. The safety reserve s (20 %) is
    * already applied by the agent: its `capacityEstimate` is `limit x (1 - s)`. Default 0, so the
    * reserve counts once; raise it only to keep more headroom on top of the agent's.
    */

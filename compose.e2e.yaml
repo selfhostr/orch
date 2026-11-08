@@ -133,7 +133,7 @@ services:
       start_period: 5s
 
   # Two member machines. They share the host Docker daemon (real socket) but have separate data,
-  # secrets and work dirs. The work dir is bind-mounted at the SAME absolute path (PLAN 5.1).
+  # secrets and work dirs. The work dir is bind-mounted at the SAME absolute path.
   # The runner starts them once it has their enrollment tokens.
   alice:
     <<: *agent

@@ -997,7 +997,7 @@ export class AgentGateway {
         });
         if (!r.ok) {
           if (r.code === 'offer_closed') {
-            // PLAN 4.5: a second accept for the same task is answered with a cancel.
+            // A second accept for the same task is answered with a cancel.
             const id = m.payload.assignmentId;
             after.push(() =>
               this.send(c, serverMessage('task.cancel', { assignmentId: id, reason: 'taken' })),

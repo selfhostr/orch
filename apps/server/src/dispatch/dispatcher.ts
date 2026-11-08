@@ -1,5 +1,5 @@
 /**
- * The dispatcher (PLAN section 6): an in-process scheduler whose state lives in Postgres.
+ * The dispatcher: an in-process scheduler whose state lives in Postgres.
  *
  * Every tick (and every kick after an event) it
  *   1. expires PENDING offers and requests whose `expiresAt` passed,
@@ -439,7 +439,7 @@ export class Dispatcher {
     return out;
   }
 
-  /** Eligible members for a task, best first (PLAN section 6). */
+  /** Eligible members for a task, best first. */
   async candidatesFor(task: DispatchTask, snap: TickSnapshot, now: Date): Promise<Candidate[]> {
     const members = await this.evaluateMembers(task, snap, now);
     return members.flatMap((m) => (m.candidate ? [m.candidate] : [])).sort(compareCandidates);
@@ -1382,7 +1382,7 @@ export class Dispatcher {
   // ---------- agent (re)connection ----------
 
   /**
-   * PLAN 4.5 reconciliation on `hello`: cancel runs the server no longer considers live, re-send
+   * Reconciliation on `hello`: cancel runs the server no longer considers live, re-send
    * open offers and accepted-but-not-started runs, re-send requests and pending cleanups.
    */
   async onAgentHello(

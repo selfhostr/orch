@@ -1,5 +1,5 @@
 /**
- * Consent guard (PLAN section 6, "enforced twice"). Nothing may auto-start on a member's machine
+ * Consent guard. Nothing may auto-start on a member's machine
  * unless the member participates in the project (active, approved when required), is in AUTO
  * mode and neither the member nor the agent is paused. There is no override: owners and admins
  * go through the same check.

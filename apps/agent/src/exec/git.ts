@@ -1,5 +1,5 @@
 /**
- * Git operations for a task (PLAN 5.1, 5.5).
+ * Git operations for a task.
  *
  * The task container can write anything in its clone, and the agent holds the docker socket, so
  * nothing the task writes may ever be interpreted by the agent's git:

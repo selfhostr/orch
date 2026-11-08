@@ -1,4 +1,4 @@
-/** Exponential backoff with FULL jitter (PLAN 4.5): delay = random() * min(max, base * 2^attempt). */
+/** Exponential backoff with FULL jitter: delay = random() * min(max, base * 2^attempt). */
 
 export interface BackoffOptions {
   baseMs: number;

@@ -1,5 +1,5 @@
 /**
- * Budget arithmetic of the dispatcher (PLAN section 6). Pure functions, every figure an ESTIMATE.
+ * Budget arithmetic of the dispatcher. Pure functions, every figure an ESTIMATE.
  *
  *   B(u,p)      = percent(u,p)/100 x C_u x (1 - s)          (5-hour window only)
  *   margin(u,p) = B(u,p) - used(u,p) - reserved(u,p)
@@ -144,7 +144,7 @@ export interface RankKey {
 }
 
 /**
- * PLAN ranking: highest margin/B, then fewest running tasks, then reset soonest, then least
+ * Ranking: highest margin/B, then fewest running tasks, then reset soonest, then least
  * recently assigned. The user id breaks remaining ties so the order is deterministic.
  */
 export function compareCandidates(a: RankKey, b: RankKey): number {

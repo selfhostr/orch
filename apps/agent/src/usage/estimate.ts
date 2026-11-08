@@ -17,7 +17,7 @@ const zero = (): TokenTotals => ({ input: 0, output: 0, cacheWrite: 0, cacheRead
 export const modelFactor = (model: string, opusFactor: number): number =>
   modelFamily(model) === 'opus' ? opusFactor : 1;
 
-/** PLAN 5.7: (input + output + cacheWrite + 0.1 * cacheRead) * modelFactor. */
+/** (input + output + cacheWrite + 0.1 * cacheRead) * modelFactor. */
 export function weigh(t: TokenTotals, factor: number): number {
   return (t.input + t.output + t.cacheWrite + 0.1 * t.cacheRead) * factor;
 }
