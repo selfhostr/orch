@@ -35,7 +35,7 @@ Add tests for any behaviour you change. A bug fix comes with a regression test t
 - Update the docs in `docs/` and `CHANGELOG.md` when behaviour or configuration changes.
 - Applied database migrations are immutable: never edit or rename one. Give a new migration a timestamp later than the latest folder.
 - User-visible text goes through the typed catalogs in `apps/web/src/i18n/` in English and French; `pnpm --filter @orch/web i18n:check` must pass.
-- No secrets, tokens, private keys or `.env` files in the diff or the screenshots.
+- No secrets, tokens, private keys or `.env` files in the diff.
 
 The [development guide](docs/development.md) covers migrations, the dev agent, CI, dependency updates, documentation and translations in detail.
 
