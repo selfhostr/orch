@@ -6,7 +6,7 @@
 FROM docker:28-cli AS docker-cli
 
 # ---- deps: production dependencies only. Built in parallel with the runtime stage below. ----
-FROM node:24-bookworm-slim AS deps
+FROM node:26-bookworm-slim AS deps
 ENV COREPACK_HOME=/opt/corepack \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     CI=true
@@ -18,7 +18,7 @@ COPY apps/agent/package.json apps/agent/
 RUN pnpm install --frozen-lockfile --prod --filter "@orch/agent..."
 
 # ---- runtime ----
-FROM node:24-bookworm-slim
+FROM node:26-bookworm-slim
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git screen ca-certificates curl tini \
