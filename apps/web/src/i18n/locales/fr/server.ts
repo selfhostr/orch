@@ -69,7 +69,7 @@ export default {
     done: 'Mise à jour effectuée',
     statusLabel: 'État de la mise à jour de {machine}',
     now: 'Mettre à jour maintenant',
-    nowLabel: 'Mettre à jour {machine} maintenant',
+    nowLabel: 'Mettre à jour maintenant, {machine}',
     whenIdle: 'Mettre à jour quand l’agent est inactif',
     whenIdleLabel: 'Mettre à jour {machine} quand l’agent est inactif',
     manual:
