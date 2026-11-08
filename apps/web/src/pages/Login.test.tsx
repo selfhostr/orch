@@ -47,8 +47,8 @@ describe('sign-in page language', () => {
   it('switches to French from the language lever and remembers it', async () => {
     mockApi(unauthenticated);
     renderApp('/login');
-    const fr = await screen.findByRole('button', { name: 'Français' });
-    expect(screen.getByRole('button', { name: 'English' }).getAttribute('aria-pressed')).toBe(
+    const fr = await screen.findByRole('button', { name: /Français/ });
+    expect(screen.getByRole('button', { name: /English/ }).getAttribute('aria-pressed')).toBe(
       'true',
     );
     fireEvent.click(fr);

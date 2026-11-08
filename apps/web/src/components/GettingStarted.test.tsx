@@ -41,7 +41,7 @@ describe('Getting started', () => {
   it('shows the nav progress', async () => {
     mockApi(base(['done', 'done', 'todo', 'todo', 'unknown', 'todo']));
     renderApp('/projects');
-    const pill = await screen.findByLabelText(/Getting started: 2 of 6/);
+    const pill = await screen.findByLabelText(/Getting started: 2\/6/);
     expect(pill.textContent).toBe('2/6');
   });
 
