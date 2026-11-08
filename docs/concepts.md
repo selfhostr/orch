@@ -97,5 +97,3 @@ The task image comes from the repository's `Dockerfile` or a simple `.devcontain
 ### The compose guard
 
 When a task uses the repository's own `compose.yaml` for its sidecars, the agent validates it before starting anything, with allowlists of keys and values on the fully resolved model: host bind mounts, the Docker socket, host or foreign namespaces and networks, privileges, devices, extra capabilities, out-of-repository builds, secrets and includes are refused with an error naming the key. It then runs a hardened copy: no published ports, all capabilities dropped but a harmless baseline, `no-new-privileges`, and capped memory, CPU and pids. The full list is in {ref}`compose-guard`.
-
-For the complete design see {doc}`PLAN`.

@@ -1,5 +1,5 @@
 /**
- * Task executor (PLAN 5.1-5.6): manual mode (M3) and auto mode (M4).
+ * Task executor: manual mode (M3) and auto mode (M4).
  *
  * take:   guards (pause, maxConcurrent, Claude token) -> `task.claim` -> server `task.offer`
  *         (kind CLAIM) -> `offer.accept` MANUAL -> clone token -> mirror + isolated clone ->
@@ -90,7 +90,7 @@ const NO_USAGE: Usage = { weighted: 0, input: 0, output: 0 };
 export interface ExecutorConfig {
   /** This agent's id: put on every docker resource it creates (`orch.agent`) for reconcile. */
   agentId: string;
-  /** Host path bind-mounted at the same path in the agent (PLAN 5.1). */
+  /** Host path bind-mounted at the same path in the agent. */
   workDir: string;
   dataDir: string;
   maxConcurrent: number;
@@ -503,7 +503,7 @@ export class ManualExecutor {
   // ---------- auto mode: consent guard ----------
 
   /**
-   * The agent is the last line of defense (PLAN 6, consent invariants): nothing runs unless the
+   * The agent is the last line of defense: nothing runs unless the
    * offer is an AUTO_OFFER for a project this member runs in auto mode, or a CONSENT_REQUEST the
    * member accepted, and the machine is not paused and has a free slot.
    */
@@ -1365,7 +1365,7 @@ export class ManualExecutor {
   }
 
   /**
-   * The run's Claude usage (an estimate, PLAN 5.7), read BEFORE the container is removed: the
+   * The run's Claude usage (an estimate), read BEFORE the container is removed: the
    * task's own transcripts (`/tmp/.claude`, tmpfs), the usage seen on the stream and the final
    * `result` event. The largest of them wins (each may miss part of the run). The entries are
    * recorded in the task ledger so the usage loop counts them in the member's 5-hour window.

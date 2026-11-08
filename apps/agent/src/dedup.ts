@@ -1,5 +1,5 @@
 /**
- * Bounded, persisted set of processed server message ids (PLAN 4.5 idempotency).
+ * Bounded, persisted set of processed server message ids.
  * Keeps at most `max` ids and drops ids older than `ttlMs`.
  */
 import { z } from 'zod';

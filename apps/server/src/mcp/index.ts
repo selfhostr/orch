@@ -1,5 +1,5 @@
 /**
- * M5 MCP server (PLAN section 7): Streamable HTTP at `/mcp`, stateless (one MCP server and
+ * M5 MCP server: Streamable HTTP at `/mcp`, stateless (one MCP server and
  * transport per HTTP request), JSON responses. Auth: `Authorization: Bearer <token>` with an OAuth
  * access token (`orch_oat_...`, see ../oauth) or a personal access token (`orch_pat_...`); 401
  * with `WWW-Authenticate: Bearer resource_metadata="..."` otherwise, which starts the OAuth flow

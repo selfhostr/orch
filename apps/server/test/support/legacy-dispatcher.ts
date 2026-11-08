@@ -344,7 +344,7 @@ export class LegacyDispatcher {
     return out;
   }
 
-  /** Eligible members for a task, best first (PLAN section 6). */
+  /** Eligible members for a task, best first. */
   async candidatesFor(task: DispatchTask, now: Date): Promise<Candidate[]> {
     const members = await this.evaluateMembers(task, now);
     return members.flatMap((m) => (m.candidate ? [m.candidate] : [])).sort(compareCandidates);
