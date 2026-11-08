@@ -2,6 +2,12 @@
 
 All notable changes to orch. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions are `0.MINOR.PATCH` until 1.0. The full notes of each release are on the [releases page](https://github.com/selfhostr/orch/releases).
 
+## Unreleased
+
+### Security
+
+- Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
+
 ## 0.9.1 - 2026-11-04
 
 ### Changed

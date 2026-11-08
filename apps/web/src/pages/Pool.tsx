@@ -1,3 +1,4 @@
+import { avatarSrc } from '../avatar';
 import { useQuery } from '@tanstack/react-query';
 import type { PoolMember } from '@orch/shared';
 import { useState } from 'react';
@@ -29,8 +30,8 @@ function MemberCard({ m, phase }: { m: PoolMember; phase: Phase }) {
       {...presenceProps(phase)}
     >
       <div className="member-head">
-        {m.avatarUrl ? (
-          <img className="avatar large" src={m.avatarUrl} alt={m.login} />
+        {avatarSrc(m.avatarUrl, 128) ? (
+          <img className="avatar large" src={avatarSrc(m.avatarUrl, 128)!} alt={m.login} />
         ) : (
           <span className="avatar large" data-initial={m.login.slice(0, 1)} />
         )}

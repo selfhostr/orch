@@ -1,3 +1,4 @@
+import { avatarSrc } from '../avatar';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import type { UsageBudgetRow, UsageDashboard, UsageRange, UsageTotals } from '@orch/shared';
@@ -51,8 +52,8 @@ function Share({ value, max }: { value: number; max: number }) {
 function Person({ login, avatarUrl }: { login: string; avatarUrl: string | null }) {
   return (
     <span className="usage-person">
-      {avatarUrl ? (
-        <img className="avatar small" src={avatarUrl} alt="" />
+      {avatarSrc(avatarUrl) ? (
+        <img className="avatar small" src={avatarSrc(avatarUrl)!} alt="" />
       ) : (
         <span className="avatar small" data-initial={login.slice(0, 1)} aria-hidden="true" />
       )}
