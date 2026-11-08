@@ -50,7 +50,7 @@ jobs:
       - name: Install dependencies
         run: ./dev build-tools && ./dev pnpm install --frozen-lockfile
       - name: Check licences
-        run: ./dev pnpm licences
+        run: ./dev pnpm run check:licences
 
   ui:
     name: Browser UI tests (Playwright, Docker)

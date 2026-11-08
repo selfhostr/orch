@@ -1,4 +1,5 @@
 import { escapeHtml } from '../auth/cookies';
+import { avatarPath } from '../avatars/path';
 
 /** Server-rendered pages of the access flow (no session yet, so not the web app). */
 function page(title: string, body: string): string {
@@ -18,8 +19,8 @@ ${body}
 
 function who(login: string, avatarUrl: string | null): string {
   const img =
-    avatarUrl && /^https:\/\//.test(avatarUrl)
-      ? `<img src="${escapeHtml(avatarUrl)}" alt="" referrerpolicy="no-referrer">`
+    avatarUrl && avatarPath(avatarUrl)
+      ? `<img src="${escapeHtml(avatarPath(avatarUrl)!)}" alt="">`
       : '';
   return `<div class="who">${img}<strong>${escapeHtml(login)}</strong></div>`;
 }

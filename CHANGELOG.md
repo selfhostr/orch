@@ -6,8 +6,12 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Added
 
-- A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm licences`).
+- A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm run check:licences`).
 - The README states that the agent image installs Claude Code, which is proprietary software from Anthropic, and that orch itself is MIT.
+
+### Security
+
+- Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
 
 ## 0.9.1 - 2026-11-04
 

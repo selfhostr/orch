@@ -1,3 +1,4 @@
+import { avatarSrc } from '../avatar';
 import { useQuery } from '@tanstack/react-query';
 import type { BlockReason, TaskView } from '@orch/shared';
 import { useEffect, useRef, useState } from 'react';
@@ -121,10 +122,10 @@ export function TaskCard({
       <p className="task-title">{task.title}</p>
       <p className="hint">{task.projectFullName}</p>
       <div className="row">
-        {task.createdBy.avatarUrl ? (
+        {avatarSrc(task.createdBy.avatarUrl) ? (
           <img
             className="avatar small"
-            src={task.createdBy.avatarUrl}
+            src={avatarSrc(task.createdBy.avatarUrl)!}
             alt={t('backlog.card.createdBy', { login: task.createdBy.githubLogin })}
           />
         ) : (

@@ -1,3 +1,4 @@
+import { avatarSrc } from '../avatar';
 import { Suspense, ViewTransition, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -173,8 +174,8 @@ export function Layout() {
             <LanguageSwitcher />
             {me && (
               <div className="user">
-                {me.avatarUrl ? (
-                  <img className="avatar" src={me.avatarUrl} alt={me.githubLogin} />
+                {avatarSrc(me.avatarUrl) ? (
+                  <img className="avatar" src={avatarSrc(me.avatarUrl)!} alt={me.githubLogin} />
                 ) : (
                   <span className="avatar" data-initial={me.githubLogin.slice(0, 1)} />
                 )}
