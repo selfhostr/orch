@@ -19,7 +19,7 @@ case "$ORCH_E2E_PROJECT" in orch|orch-agent) echo "refusing prod project"; exit 
 BASE="${ORCH_UITEST_HOME:-$HOME/.cache/orch-uitest}"
 WORK="$BASE/work"
 ENVF="$WORK/env"
-PW_IMAGE="mcr.microsoft.com/playwright:v1.56.1-noble" # keep in sync with @playwright/test in package.json
+PW_IMAGE="mcr.microsoft.com/playwright:v1.64.1-noble" # keep in sync with @playwright/test in package.json
 mkdir -p "$WORK/alice" "$WORK/bob" "$WORK/state" "$BASE/shots"
 if [ ! -f "$ENVF" ]; then
   rand() { head -c 32 /dev/urandom | base64 | tr -d '\n'; }
