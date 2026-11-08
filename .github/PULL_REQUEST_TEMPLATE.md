@@ -8,10 +8,6 @@
 
 <!-- Anything a reviewer needs to know: design choices, alternatives rejected, follow-ups left out. -->
 
-## Screenshots
-
-<!-- Required for UI changes: before/after, light and dark. Delete this section otherwise. -->
-
 ## Checklist
 
 - [ ] `./dev lint`, `./dev typecheck` and `./dev test` pass
@@ -20,4 +16,4 @@
 - [ ] New or changed strings exist in English and French and `i18n:check` passes
 - [ ] New migration has a unique timestamp later than the latest one, and no applied migration was edited
 - [ ] Docs in `docs/` and `CHANGELOG.md` updated when behaviour or configuration changes
-- [ ] No secret, token or `.env` file in the diff or the screenshots
+- [ ] No secret, token or `.env` file in the diff
