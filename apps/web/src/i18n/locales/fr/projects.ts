@@ -65,9 +65,9 @@ export default {
     rejectedHeading: 'Membres refusés',
     rejectedBadge: 'refusé',
     undoPending: 'Annuler : remettre en attente',
-    undoPendingAria: 'Annuler le refus de {login} : remettre en attente',
+    undoPendingAria: 'Annuler : remettre en attente, refus de {login}',
     undoApprove: 'Annuler : approuver',
-    undoApproveAria: 'Annuler le refus de {login} : approuver',
+    undoApproveAria: 'Annuler : approuver, refus de {login}',
     mode: {
       auto: 'auto',
       approval: 'approbation',

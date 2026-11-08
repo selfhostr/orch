@@ -208,7 +208,7 @@ describe('My projects', () => {
     expect(within(card).getByText(/Approval is off/)).toBeTruthy();
     expect(within(card).getByRole('heading', { name: 'Rejected members' })).toBeTruthy();
     expect(within(card).getByText('spam')).toBeTruthy();
-    fireEvent.click(within(card).getByRole('button', { name: 'Undo rejection of bob: approve' }));
+    fireEvent.click(within(card).getByRole('button', { name: 'Undo: approve, rejection of bob' }));
     await waitFor(() =>
       expect(calls).toContainEqual({
         method: 'POST',
@@ -217,7 +217,7 @@ describe('My projects', () => {
       }),
     );
     expect(
-      within(card).getByRole('button', { name: 'Undo rejection of bob: back to pending' }),
+      within(card).getByRole('button', { name: 'Undo: back to pending, rejection of bob' }),
     ).toBeTruthy();
   });
 });
