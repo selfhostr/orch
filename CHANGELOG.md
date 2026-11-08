@@ -2,6 +2,12 @@
 
 All notable changes to orch. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions are `0.MINOR.PATCH` until 1.0. The full notes of each release are on the [releases page](https://github.com/selfhostr/orch/releases).
 
+## Unreleased
+
+### Changed
+
+- The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.
+
 ## 0.9.1 - 2026-11-04
 
 ### Changed
