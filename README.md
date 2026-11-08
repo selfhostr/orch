@@ -52,6 +52,7 @@ Caddy (automatic HTTPS, static web build) fronts a Fastify server with Postgres;
 - In auto mode the task container runs with `bypassPermissions`, network access and the member's Claude token, with no egress filtering.
 - The agent is root-equivalent on the member's host (it mounts `/var/run/docker.sock`); rootless Docker reduces this.
 - Single server instance by default; usage and budget are estimates. GitHub only, English UI only.
+- The agent image installs Claude Code, which is proprietary software from Anthropic and is subject to Anthropic's terms; orch itself is MIT-licensed.
 - Releases are `0.x`: anything may change between minor versions. See the [security model](https://orch.selfhostr.io/docs/security/).
 
 ## Contributing

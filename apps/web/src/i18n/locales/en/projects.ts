@@ -60,9 +60,9 @@ export default {
     rejectedHeading: 'Rejected members',
     rejectedBadge: 'rejected',
     undoPending: 'Undo: back to pending',
-    undoPendingAria: 'Undo rejection of {login}: back to pending',
+    undoPendingAria: 'Undo: back to pending, rejection of {login}',
     undoApprove: 'Undo: approve',
-    undoApproveAria: 'Undo rejection of {login}: approve',
+    undoApproveAria: 'Undo: approve, rejection of {login}',
     mode: {
       auto: 'auto',
       approval: 'approval',

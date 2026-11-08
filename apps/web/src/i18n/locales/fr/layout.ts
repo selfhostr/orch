@@ -24,8 +24,8 @@ export default {
     home: 'Accueil orch',
     setupWizard: 'Assistant de configuration',
     gettingStarted: {
-      one: 'Premiers pas : {count} étape sur {total} terminée',
-      other: 'Premiers pas : {count} étapes sur {total} terminées',
+      one: 'Premiers pas : {count}/{total} étape terminée',
+      other: 'Premiers pas : {count}/{total} étapes terminées',
     },
     docs: 'Documentation',
     repo: 'Dépôt GitHub',

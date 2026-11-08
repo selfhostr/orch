@@ -22,8 +22,8 @@ export default {
     home: 'orch home',
     setupWizard: 'Setup wizard',
     gettingStarted: {
-      one: 'Getting started: {count} of {total} steps done',
-      other: 'Getting started: {count} of {total} steps done',
+      one: 'Getting started: {count}/{total} steps done',
+      other: 'Getting started: {count}/{total} steps done',
     },
     docs: 'Documentation',
     repo: 'GitHub repository',

@@ -4,6 +4,11 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ## Unreleased
 
+### Added
+
+- A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm run check:licences`).
+- The README states that the agent image installs Claude Code, which is proprietary software from Anthropic, and that orch itself is MIT.
+
 ### Changed
 
 - The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.

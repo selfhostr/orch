@@ -56,11 +56,11 @@ test('owner: pending participant reject with reason, undo, approve; rejected und
   await page.getByRole('button', { name: 'Confirm reject' }).click();
   await expect(page.getByText('dana rejected')).toBeVisible();
   await expect(card.getByText('Rejected members')).toBeVisible();
-  await card.getByRole('button', { name: /Undo rejection of dana: back to pending/ }).click();
+  await card.getByRole('button', { name: /Undo: back to pending, rejection of dana/ }).click();
   await expect(card.getByRole('button', { name: 'Approve dana' })).toBeVisible();
   await card.getByRole('button', { name: 'Approve dana' }).click();
   await expect(page.getByText('dana approved')).toBeVisible();
-  await card.getByRole('button', { name: /Undo rejection of erin: approve/ }).click();
+  await card.getByRole('button', { name: /Undo: approve, rejection of erin/ }).click();
   await expect(page.getByText('erin approved')).toBeVisible();
 });
 

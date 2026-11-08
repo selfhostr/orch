@@ -40,7 +40,10 @@ export async function auditPage(
     const bad = await axe(page, tag);
     expect
       .soft(
-        bad.map((v) => `${v.id}: ${v.nodes.length} node(s)`),
+        bad.map(
+          (v) =>
+            `${v.id}: ${v.nodes.length} node(s) ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`,
+        ),
         `${tag}: axe serious/critical`,
       )
       .toEqual([]);

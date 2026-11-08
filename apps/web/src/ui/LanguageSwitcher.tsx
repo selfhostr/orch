@@ -25,7 +25,7 @@ export function LanguageSwitcher() {
           className="lang-option"
           lang={l}
           aria-pressed={l === locale}
-          aria-label={LOCALE_NAMES[l]}
+          aria-label={`${l.toUpperCase()} ${LOCALE_NAMES[l]}`}
           title={LOCALE_NAMES[l]}
           aria-busy={loading === l || undefined}
           onClick={() => choose(l)}
