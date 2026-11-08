@@ -2,7 +2,7 @@
   <defs><pattern id="g" width="44" height="44" patternUnits="userSpaceOnUse"><path d="M44 0H0V44" fill="none" stroke="#ffffff" stroke-opacity=".05"/></pattern></defs>
   <rect width="1280" height="280" rx="18" fill="#07080a"/>
   <rect width="1280" height="280" rx="18" fill="url(#g)"/>
-  <g transform="translate(64 72) scale(2.1875)"><rect width="64" height="64" rx="15" fill="#17181c"/><path d="M12 21c11 0 13 11 24 11M12 43c11 0 13-11 24-11M36 32h10" fill="none" stroke="#ecedef" stroke-width="4.5" stroke-linecap="round"/><circle cx="51" cy="32" r="5.5" fill="#e8743b"/></g>
+  <g transform="translate(64 72) scale(2.1875)"><rect width="64" height="64" rx="15" fill="#17181c"/><path d="M32 32V14M32 32 47.6 41M32 32 16.4 41" fill="none" stroke="#ecedef" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="14" r="4.5" fill="#ecedef"/><circle cx="47.6" cy="41" r="4.5" fill="#ecedef"/><circle cx="16.4" cy="41" r="4.5" fill="#ecedef"/><circle cx="32" cy="32" r="7" fill="#e8743b"/></g>
   <text x="228" y="134" fill="#eceef1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="60" font-weight="600" letter-spacing="-1.2">orch</text>
   <text x="230" y="184" fill="#c9ccd1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="28">A shared to-do list that turns into pull requests.</text>
   <text x="1216" y="244" text-anchor="end" fill="#8b9098" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="17">a selfhostr project</text>

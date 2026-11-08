@@ -166,6 +166,8 @@ export interface MakeAppOptions {
   logStream?: { write(msg: string): void };
   /** Notifier test hooks (webhook HTTP client, e-mail transport). */
   notify?: AppDeps['notify'];
+  /** Fetch used for GitHub's avatar host. */
+  avatarFetch?: AppDeps['avatarFetch'];
 }
 
 export function makeApp(
@@ -197,7 +199,14 @@ export function makeApp(
     ORCH_CLUSTER_NAME: `t${uid()}`.slice(0, 40),
     ...opts.env,
   });
-  return buildApp({ config, prisma, github, logStream: opts.logStream, notify: opts.notify });
+  return buildApp({
+    config,
+    prisma,
+    github,
+    logStream: opts.logStream,
+    notify: opts.notify,
+    avatarFetch: opts.avatarFetch,
+  });
 }
 
 export interface TestUser {

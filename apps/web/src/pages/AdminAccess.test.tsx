@@ -57,7 +57,8 @@ describe('Admin access', () => {
     const imgs = [...container.querySelectorAll('img.avatar')] as HTMLImageElement[];
     expect(imgs.length).toBeGreaterThan(0);
     for (const img of imgs) {
-      expect(imgSrc).toContain(new URL(img.src).origin);
+      expect(imgSrc).toContain("'self'");
+      expect(new URL(img.src).origin).toBe(window.location.origin);
     }
   });
 

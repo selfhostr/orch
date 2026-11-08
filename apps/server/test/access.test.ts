@@ -247,7 +247,8 @@ describe('request access', () => {
     expect(first.cookie).toBeUndefined();
     expect(first.body).toContain('Request access');
     expect(first.body).toContain(login);
-    expect(first.body).toContain(`https://avatars.githubusercontent.com/u/${first.githubId}`);
+    expect(first.body).toContain(`/api/avatars/u/${first.githubId}?s=96`);
+    expect(first.body).not.toContain('githubusercontent.com');
     const token = tokenOf(first.body)!;
     expect(token).toBeTruthy();
 

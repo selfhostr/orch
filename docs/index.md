@@ -1,6 +1,6 @@
 # orch
 
-orch is a shared to-do list for small, trusted teams, with automation on top.
+orch is a shared to-do list for teams who trust each other, with automation on top.
 
 - Tasks are GitHub issues. A team member (or Claude Code, through MCP) adds them to a shared pool.
 - Each member runs tasks **on their own machine, with their own Claude subscription**. Nothing is pooled across accounts.

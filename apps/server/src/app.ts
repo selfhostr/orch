@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { redactSecrets } from '@orch/shared';
 import { createAgentGateway, registerAgents } from './agents';
 import { registerAccess } from './access';
+import { registerAvatars, type AvatarFetch } from './avatars';
 import { registerAuth } from './auth';
 import { Cluster } from './cluster';
 import type { Config } from './config';
@@ -47,6 +48,8 @@ export interface AppDeps {
   /** Test hook: where pino writes (with config.LOG_LEVEL). */
   logStream?: { write(msg: string): void };
   /** Test hooks: webhook HTTP client, e-mail transport and Web Push sender of the notifier. */
+  /** Test hook: fetch used to reach GitHub's avatar host. */
+  avatarFetch?: AvatarFetch;
   notify?: { post?: WebhookPoster; mailer?: Mailer | null; pusher?: PushSender | null };
 }
 
@@ -64,7 +67,14 @@ export function redactingStream(dest: { write(msg: string): unknown }): {
   return { write: (msg: string) => void dest.write(redactSecrets(msg)) };
 }
 
-export function buildApp({ config, prisma, github, logStream, notify }: AppDeps): FastifyInstance {
+export function buildApp({
+  config,
+  prisma,
+  github,
+  logStream,
+  notify,
+  avatarFetch,
+}: AppDeps): FastifyInstance {
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,
@@ -155,6 +165,7 @@ export function buildApp({ config, prisma, github, logStream, notify }: AppDeps)
     // After the session lookup hook: requests are keyed by user id when signed in.
     registerRateLimit(app, config, new SharedCounter(prisma, config.ORCH_CLUSTER_NAME, app.log));
     registerAccess(app, deps);
+    registerAvatars(app, { fetch: avatarFetch });
     registerProjects(app, m4);
     registerParticipation(app, m4);
     registerTasks(app, m4);
