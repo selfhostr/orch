@@ -1,3 +1,4 @@
+import { avatarSrc, loginAvatarSrc } from '../avatar';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Fragment, useState } from 'react';
 import { useMe } from '../auth';
@@ -40,11 +41,8 @@ function Avatar({ g }: { g: AccessGrant }) {
   return (
     <img
       className="avatar"
-      // avatars.githubusercontent.com: the only image host the CSP allows (github.com is not).
-      src={
-        g.avatarUrl ??
-        `https://avatars.githubusercontent.com/${encodeURIComponent(g.githubLogin)}?size=64`
-      }
+      // Served by the orch server (CSP img-src 'self'), never fetched from GitHub by the browser.
+      src={avatarSrc(g.avatarUrl, 64) ?? loginAvatarSrc(g.githubLogin, 64) ?? undefined}
       alt=""
     />
   );

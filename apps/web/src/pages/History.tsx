@@ -1,3 +1,4 @@
+import { avatarSrc } from '../avatar';
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import type { FailureClass, HistoryItem, HistoryStatus, TaskUser } from '@orch/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -116,8 +117,8 @@ const formatDay = (iso: string) =>
 function Person({ user }: { user: TaskUser }) {
   return (
     <span className="person">
-      {user.avatarUrl ? (
-        <img className="avatar small" src={user.avatarUrl} alt="" loading="lazy" />
+      {avatarSrc(user.avatarUrl) ? (
+        <img className="avatar small" src={avatarSrc(user.avatarUrl)!} alt="" loading="lazy" />
       ) : (
         <span className="avatar small" data-initial={user.githubLogin.slice(0, 1)} aria-hidden />
       )}
