@@ -2,8 +2,6 @@
 
 orch tells you when something needs you: a task you created is merged or fails, a PR waits for review, a task is offered to you, or someone asks to join your pool or your server. Notifications show up in the app (the bell in the header) and, if you want, in your browser, in Slack, Discord, any JSON webhook or by e-mail.
 
-<img src="screenshot-notifications.png" alt="The bell panel: latest notifications, unread ones marked" width="100%">
-
 ## Events
 
 | Event                     | Sent to                                           | When                                                                                 |
@@ -22,8 +20,6 @@ You are never notified about something you did yourself in the web app (for exam
 ## Channels
 
 Set them up on **My Server → Notifications**, then choose, per event, which channels it goes to. By default every event goes to the app only. Each channel has a **Send test** button that sends one message right away and shows the result.
-
-<img src="screenshot-notification-settings.png" alt="Notification settings: channel targets and the event x channel matrix" width="100%">
 
 | Channel | What you enter                                                                                     |
 | ------- | -------------------------------------------------------------------------------------------------- |

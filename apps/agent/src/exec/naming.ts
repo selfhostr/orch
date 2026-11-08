@@ -26,7 +26,7 @@ export function slugify(title: string, max = 40): string {
   return cut === '' ? 'task' : cut;
 }
 
-/** `orch/issue-<n>-<slug>` (PLAN 5.1). */
+/** `orch/issue-<n>-<slug>`. */
 export function branchName(issueNumber: number, title: string): string {
   return `orch/issue-${issueNumber}-${slugify(title)}`;
 }

@@ -69,7 +69,7 @@ One shared module (`packages/shared/src/redact`) masks secrets as `[REDACTED]`. 
 ## Limitations
 
 - Single server instance (in-process scheduler); no high availability. One host, scheduled dumps.
-- No egress control, devcontainer sanitizing or token-injecting proxy for task containers (see "Future hardening" in {doc}`PLAN`). The repository's compose file is validated and hardened ({ref}`compose-guard`), but sidecars share the task's network access.
+- No egress control, devcontainer sanitizing or token-injecting proxy for task containers (a possible future hardening). The repository's compose file is validated and hardened ({ref}`compose-guard`), but sidecars share the task's network access.
 - Usage and budget are estimates; plans are declared by the member.
 - Repos must build from a `Dockerfile` or a simple `.devcontainer.json`; complex devcontainer features are not honored.
 - Manual-mode `screen` sessions end if the agent container restarts; the task container survives and `orch attach <n>` reopens a session.

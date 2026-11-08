@@ -184,7 +184,7 @@ export function GettingStarted() {
                     : t('welcome.card.stateTodo')
               }
             >
-              {s.done ? '✓' : s.state === 'unknown' ? '?' : i + 1}
+              {s.done ? 'OK' : s.state === 'unknown' ? '?' : i + 1}
             </span>
             <div className="step-body">
               <strong className="step-title">{t(TITLES[s.id])}</strong>

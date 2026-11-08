@@ -487,7 +487,7 @@ async function main() {
         });
         assert(login.status === 0, `orch login on ${who}`, login.stderr);
         assert(
-          login.stdout.includes('✓ Claude login verified'),
+          login.stdout.includes('OK: Claude login verified'),
           `orch login on ${who} verified the token`,
           login.stdout,
         );
@@ -1114,7 +1114,7 @@ async function main() {
       const bad = aliceLogin(REJECTED_CLAUDE_TOKEN);
       assert(bad.status !== 0, 'orch login with a rejected token exits non-zero', bad.status);
       assert(
-        bad.stdout.includes('✗ Claude rejected this token (401)'),
+        bad.stdout.includes('Error: Claude rejected this token (401)'),
         'orch login says Claude rejected the token',
         bad.stdout,
       );
@@ -1152,10 +1152,10 @@ async function main() {
 
       const good = aliceLogin(FAKE_CLAUDE_TOKEN);
       assert(good.status === 0, 'orch login with a valid token', good.stderr);
-      assert(good.stdout.includes('✓ Claude login verified'), 'orch login verified', good.stdout);
+      assert(good.stdout.includes('OK: Claude login verified'), 'orch login verified', good.stdout);
       const doc = orch('alice', ['doctor'], { allowFail: true });
       assert(doc.status === 0, 'orch doctor exits 0', doc);
-      assert(doc.stdout.includes('✓ Claude login verified'), 'orch doctor verified', doc.stdout);
+      assert(doc.stdout.includes('OK: Claude login verified'), 'orch doctor verified', doc.stdout);
       const cleared = await waitFor(
         'alice login valid again on the server',
         async () => {

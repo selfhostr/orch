@@ -1365,7 +1365,7 @@ export class TaskService {
       return { ok: false, reason: 'access_denied' };
     }
     const repository = project.fullName.split('/')[1] ?? '';
-    // PLAN 5.5: the server opens the PR itself, so the agent never needs pull_requests:write.
+    // The server opens the PR itself, so the agent never needs pull_requests:write.
     const permissions: Record<string, 'read' | 'write'> =
       p.purpose === 'clone' ? { contents: 'read' } : { contents: 'write' };
     const minted = await this.deps.github.createInstallationToken(

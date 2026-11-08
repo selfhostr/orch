@@ -1,5 +1,5 @@
 /**
- * The ONLY place where task container specs are built (PLAN 5.3).
+ * The ONLY place where task container specs are built.
  *
  * Guarantees, asserted by the unit tests:
  *  - exactly one mount: the task clone's worktree (rw) at the workspace folder. Its real git dir

@@ -1,5 +1,5 @@
 /**
- * Server <-> agent WSS envelope (PLAN section 4.3).
+ * Server <-> agent WSS envelope.
  *
  * Transport: `wss://<domain>/agent/ws`, credential in `Authorization: Bearer orch_agent_<id>.<secret>`
  * (never in the URL). Auth failure at upgrade time is answered with HTTP 401 before the socket opens.

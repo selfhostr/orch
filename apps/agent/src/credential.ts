@@ -1,6 +1,6 @@
 /**
  * Agent credential resolution: ORCH_AGENT_CREDENTIAL (written by install.sh) -> the credential
- * file in the data volume -> enrollment with ORCH_ENROLL_TOKEN (dev fallback, PLAN 4.1).
+ * file in the data volume -> enrollment with ORCH_ENROLL_TOKEN (dev fallback).
  * The credential is never logged.
  */
 import { readFileSync } from 'node:fs';

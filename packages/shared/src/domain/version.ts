@@ -1,5 +1,5 @@
 /**
- * Agent version helpers (agent update notification, PLAN "Updating agents").
+ * Agent version helpers (agent update notification).
  *
  * Versions are release versions without the leading "v" (`0.4.3`, `0.5.0-rc.1`). `dev` (local
  * builds) and anything unparseable are never considered outdated, and never a valid update target.
