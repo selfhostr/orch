@@ -208,17 +208,17 @@ strong {
   gap: 8px;
 }
 .brand-mark {
-  width: 34px;
+  width: 22px;
   height: 22px;
 }
 .brand-mark .track {
   fill: none;
-  stroke: var(--ink);
-  stroke-width: 2.4;
+  stroke: #ecedef;
+  stroke-width: 4;
   stroke-linecap: round;
 }
 .brand-mark .signal {
-  fill: var(--proceed);
+  fill: #e8743b;
   filter: drop-shadow(0 0 3px color-mix(in srgb, var(--proceed) 70%, transparent));
 }
 .brand-name {
@@ -229,7 +229,7 @@ strong {
   padding-top: 0.12em;
 }
 .brand.large .brand-mark {
-  width: 68px;
+  width: 44px;
   height: 44px;
 }
 .brand.large .brand-name {
@@ -2095,12 +2095,12 @@ details.card > summary {
   from {
     opacity: 0;
     transform: scale(0.3);
-    transform-origin: 28.5px 11px;
+    transform-origin: 32px 32px;
   }
   60% {
     opacity: 1;
     transform: scale(1.25);
-    transform-origin: 28.5px 11px;
+    transform-origin: 32px 32px;
   }
 }
 @keyframes rail {
