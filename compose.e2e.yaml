@@ -37,7 +37,7 @@ services:
       - e2e-keys:/keys
 
   postgres:
-    image: postgres:18-alpine
+    image: postgres:16-alpine
     environment:
       POSTGRES_USER: orch
       POSTGRES_PASSWORD: e2e-only
