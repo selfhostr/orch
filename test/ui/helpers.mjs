@@ -41,7 +41,8 @@ export async function auditPage(
     expect
       .soft(
         bad.map(
-          (v) => `${v.id}: ${v.nodes.length} node(s) ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`,
+          (v) =>
+            `${v.id}: ${v.nodes.length} node(s) ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`,
         ),
         `${tag}: axe serious/critical`,
       )
