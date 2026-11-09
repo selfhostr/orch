@@ -44,6 +44,13 @@ describe('sandbox create args', () => {
     expect(joined).not.toContain('/secrets');
   });
 
+  it('runs nothing of the image but the keep-alive: no healthcheck, entrypoint replaced', () => {
+    // A HEALTHCHECK runs as the task user while Claude runs and could read its environment.
+    expect(args.filter((a) => a === '--no-healthcheck')).toHaveLength(1);
+    expect(args).toContain('--init');
+    expect(values(args, '--entrypoint')).toEqual(['sleep']);
+  });
+
   it('runs as a non-root user without privileges', () => {
     expect(values(args, '--user')).toEqual(['1000:1000']);
     expect(values(args, '--cap-drop')).toEqual(['ALL']);

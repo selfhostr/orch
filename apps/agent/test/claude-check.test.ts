@@ -132,6 +132,7 @@ describe('check container', () => {
     expect(values(args, '--label')).toEqual(
       expect.arrayContaining(['orch.agent=agt_1', `${CHECK_LABEL}=claude-auth`]),
     );
+    expect(args).toContain('--no-healthcheck');
     expect(args).not.toContain('--mount');
     expect(args).not.toContain('-v');
     const env = values(args, '-e');

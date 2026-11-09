@@ -7,7 +7,8 @@
  *    home, no /data, no mirrors, no other task. The Claude binary is copied in (`docker cp`)
  *    instead of being mounted.
  *  - a non-root `--user uid:gid`, `--cap-drop ALL`, `no-new-privileges`, no `--privileged`,
- *    pids/memory/cpu limits by size, `/tmp` as tmpfs, a per-task network, no published ports.
+ *    pids/memory/cpu limits by size, `/tmp` as tmpfs, a per-task network, no published ports,
+ *    the image's ENTRYPOINT/CMD replaced by `sleep infinity` and its HEALTHCHECK disabled.
  *  - the Claude token is never part of the container: `docker create` blanks it, and only the
  *    `docker exec` that starts Claude passes it, by NAME only (`-e CLAUDE_CODE_OAUTH_TOKEN`, value
  *    from the docker CLI child's environment). It never appears in argv, logs, files, `docker
@@ -201,6 +202,9 @@ export function buildCreateArgs(s: SandboxSpec): string[] {
     '--workdir',
     s.workspaceFolder,
     '--init',
+    // An image HEALTHCHECK would run repository code periodically, as the same user, while
+    // Claude runs: it could read the Claude process's environment (the token).
+    '--no-healthcheck',
   ];
   for (const [k, v] of Object.entries(s.labels)) args.push('--label', `${k}=${v}`);
   args.push(...sandboxEnvArgs(s.containerEnv));

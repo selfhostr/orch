@@ -145,6 +145,7 @@ export function buildCheckCreateArgs(name: string, cfg: ClaudeCheckConfig): stri
     '--workdir',
     '/tmp',
     '--init',
+    '--no-healthcheck',
     '--label',
     `${AGENT_LABEL}=${cfg.agentId}`,
     '--label',
