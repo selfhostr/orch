@@ -15,7 +15,10 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Fixed
 
-- With several server instances, an offer relayed to the instance holding the agent's socket that gets no answer within 5 s is no longer taken as "agent offline". A task taken with `take_task` stays claimed instead of going back to TODO while the machine may already run it: the machine's first progress report confirms it, and a `hello` without it or 10 minutes without any report gives it back. An automatic offer stays open until the agent answers or it expires.
+- A progress report (`task.status`, `task.pushed`, `task.finished`) racing the end of a lapsed lease no longer revives the run: a LOST assignment is not rewritten as RUNNING, PUSHED or SUCCEEDED, and its task, already back in the pool, does not go to IN_REVIEW.
+- `task.pushed` sent again after its first delivery opened the pull request but failed to record it reuses that pull request instead of failing on GitHub's 422 at every retry (only an open pull request with the same branch and base, and only for the 422 that says one already exists). A pull request opened for a run declared lost before it was recorded is closed with a comment explaining why.
+- An agent message the server saw but never acknowledged (server stopped while processing it) is processed again when the agent resends it, instead of being acknowledged as a duplicate without effect. A lost `task.finished`, or a lost `task.pushed` (its pull request is reused, see above), no longer turns the run LOST and runs the task a second time. A usage report processed again is stored once.
+- With several server instances, an offer relayed to the instance holding the agent's socket that gets no answer within 5 s is no longer taken as "agent offline". A task taken with `take_task` stays claimed instead of going back to TODO while the machine may already run it: the machine's first progress report confirms it, and a `hello` without it or the agent lease (`AGENT_LEASE_SEC`) without any report cancels the claim, without excluding the member from the task. An automatic offer stays open until the agent answers or it expires.
 
 ### Security
 
