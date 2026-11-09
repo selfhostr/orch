@@ -745,8 +745,14 @@ export class AgentGateway {
   /**
    * Replays the first answer. Still being processed: no ack, the agent outbox resends later.
    * A row without a stored ack long after it was seen means the process died mid-way: the resend
-   * takes the row over and the message is processed again (the handlers are idempotent). Returns
-   * true when the caller must process it. Only one of two concurrent resends wins the takeover.
+   * takes the row over and the message is processed again. Returns true when the caller must
+   * process it. Only one of two concurrent resends wins the takeover.
+   *
+   * Processing again changes no state twice: progress messages are guarded by `lastSeq` and the
+   * assignment status, `offer.accept` replays, `usage.report` writes its ack with the report,
+   * `pause.set`, `claude.auth` and `update.status` set values, and a replayed `task.claim` or
+   * `offer.reject` is refused. Audit rows are not deduplicated: `pause.set`, `update.status` and
+   * `done.request` may log their event twice after a crash.
    */
   private async ackDuplicate(c: Conn, messageId: string): Promise<boolean> {
     const { prisma } = this.deps;
@@ -895,7 +901,7 @@ export class AgentGateway {
     });
     switch (m.type) {
       case 'usage.report':
-        await recordUsage(prisma, { id: c.agentId, userId: c.userId }, m.payload);
+        await recordUsage(prisma, { id: c.agentId, userId: c.userId }, m.payload, new Date(), m.id);
         return { ok: true };
       case 'claude.auth': {
         const p = m.payload;

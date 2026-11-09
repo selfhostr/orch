@@ -18,7 +18,7 @@ import {
 } from '@orch/shared';
 import { sha256Hex } from '../src/auth/crypto';
 import { OfferRefusedError } from '../src/agents';
-import { purgeRetention } from '../src/usage';
+import { purgeRetention, recordUsage } from '../src/usage';
 import { FakeGithub, api, loginAs, makeApp, prisma, type TestUser } from './harness';
 
 const FAST = {
@@ -471,6 +471,40 @@ describe('agent websocket protocol', () => {
       where: { agentId_messageId: { agentId, messageId: m.id } },
     });
     expect(row.ack).toEqual({ ok: true });
+    client.close();
+  });
+
+  it('two concurrent resends of a stale unacked message: only one takes it over', async () => {
+    const { agentId, user, client } = await onlineAgent();
+    const messageId = 'stale-concurrent';
+    await prisma.agentMessageSeen.create({
+      data: { agentId, messageId, seenAt: new Date(Date.now() - 10 * 60_000) },
+    });
+    const gateway = app.agentGateway as unknown as {
+      ackDuplicate(c: unknown, id: string): Promise<boolean>;
+    };
+    const conn = (n: number) => ({
+      agentId,
+      userId: user.userId,
+      socket: { readyState: 1, OPEN: 1, send: () => undefined },
+      n,
+    });
+    const won = await Promise.all([
+      gateway.ackDuplicate(conn(1), messageId),
+      gateway.ackDuplicate(conn(2), messageId),
+    ]);
+    expect(won.filter(Boolean)).toHaveLength(1);
+    client.close();
+  });
+
+  it('a usage report processed twice for one message is stored once', async () => {
+    const { agentId, user, client } = await onlineAgent();
+    const messageId = 'usage-twice';
+    await prisma.agentMessageSeen.create({ data: { agentId, messageId } });
+    const who = { id: agentId, userId: user.userId };
+    expect(await recordUsage(prisma, who, usage(), new Date(), messageId)).toBe(true);
+    expect(await recordUsage(prisma, who, usage(), new Date(), messageId)).toBe(false);
+    expect(await prisma.usageReport.count({ where: { agentId } })).toBe(1);
     client.close();
   });
 
