@@ -35,14 +35,14 @@ The agent starts its budget estimate from the plan declared in `ORCH_PLAN`: `pro
 
 `install.sh` accepts:
 
-| Option           | Meaning                                                                              |
-| ---------------- | ------------------------------------------------------------------------------------ |
-| `--token <t>`    | One-time enrollment token (15 min). Deprecated: visible in `ps`; prefer `ORCH_TOKEN` |
-| `--server <url>` | Server URL (default: the URL the script was served from, or `$ORCH_SERVER_URL`)      |
-| `--dir <path>`   | Install directory (default `~/orch`)                                                 |
-| `--force`        | Re-enroll even if already enrolled                                                   |
-| `--uninstall`    | Stop and remove containers and volumes (and the `~/.local/bin/orch` shortcut)        |
-| `--purge`        | With `--uninstall`: also delete the install directory                                |
+| Option           | Meaning                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| `--token <t>`    | One-time enrollment token (15 min). Deprecated: visible in `ps`; prefer `ORCH_TOKEN`  |
+| `--server <url>` | Server URL (default: the URL the script was served from, or `$ORCH_SERVER_URL`)       |
+| `--dir <path>`   | Install directory (default `~/orch`)                                                  |
+| `--force`        | Re-enroll even if already enrolled                                                    |
+| `--uninstall`    | Stop and remove containers and volumes (and the `~/.local/bin/orch` shortcut)         |
+| `--purge`        | With `--uninstall`: also delete the install directory                                 |
 | `--yes`          | Do not ask for confirmation (also skips the plan question and the Claude login offer) |
 
 (updating-agents)=
