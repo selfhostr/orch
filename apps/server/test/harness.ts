@@ -121,14 +121,28 @@ export class FakeGithub implements GithubClient {
       expiresAt: new Date(Date.now() + 3600_000),
     };
   }
+  /** Like GitHub: a second pull request for the same head is refused with a 422. */
+  rejectDuplicatePullRequests = false;
   async createPullRequest(
     _installationId: number,
     fullName: string,
     input: CreatePullRequestInput,
   ) {
+    if (
+      this.rejectDuplicatePullRequests &&
+      this.pullRequests.some((p) => p.fullName === fullName && p.head === input.head)
+    ) {
+      throw Object.assign(new Error('A pull request already exists'), { status: 422 });
+    }
     const number = this.pullRequests.length + 100;
     this.pullRequests.push({ ...input, fullName, number });
     return { number, htmlUrl: `https://github.com/${fullName}/pull/${number}` };
+  }
+  async findOpenPullRequest(_installationId: number, fullName: string, head: string) {
+    const pr = this.pullRequests.find((p) => p.fullName === fullName && p.head === head);
+    return pr
+      ? { number: pr.number, htmlUrl: `https://github.com/${fullName}/pull/${pr.number}` }
+      : null;
   }
 
   // ---- M5: branches, issue close (batch compensation), failure injection ----

@@ -249,6 +249,23 @@ export class OctokitGithubClient implements GithubClient {
     return { number: data.number, htmlUrl: data.html_url };
   }
 
+  async findOpenPullRequest(
+    installationId: number,
+    fullName: string,
+    head: string,
+  ): Promise<{ number: number; htmlUrl: string } | null> {
+    const { owner, repo } = splitFullName(fullName);
+    const { data } = await this.forInstallation(installationId).rest.pulls.list({
+      owner,
+      repo,
+      head: `${owner}:${head}`,
+      state: 'open',
+      per_page: 1,
+    });
+    const pr = data[0];
+    return pr ? { number: pr.number, htmlUrl: pr.html_url } : null;
+  }
+
   async getBranchSha(
     installationId: number,
     fullName: string,

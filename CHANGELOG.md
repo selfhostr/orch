@@ -13,6 +13,11 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 - The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.
 
+### Fixed
+
+- A progress report (`task.status`, `task.pushed`, `task.finished`) racing the end of a lapsed lease no longer revives the run: a LOST assignment is not rewritten as RUNNING, PUSHED or SUCCEEDED, and its task, already back in the pool, does not go to IN_REVIEW.
+- `task.pushed` sent again after its first delivery opened the pull request but failed to record it reuses that pull request instead of failing on GitHub's 422 at every retry.
+
 ### Security
 
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.

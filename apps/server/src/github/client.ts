@@ -88,6 +88,12 @@ export interface GithubClient {
     fullName: string,
     input: CreatePullRequestInput,
   ): Promise<{ number: number; htmlUrl: string }>;
+  /** The open pull request whose head is this branch of the repository, or null. */
+  findOpenPullRequest(
+    installationId: number,
+    fullName: string,
+    head: string,
+  ): Promise<{ number: number; htmlUrl: string } | null>;
   /** M5: head commit of a branch, or null when it does not exist. */
   getBranchSha(installationId: number, fullName: string, branch: string): Promise<string | null>;
   /** M5: creates a branch at a commit (no error when it already exists). */
