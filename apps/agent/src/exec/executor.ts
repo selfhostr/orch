@@ -1664,6 +1664,8 @@ const CLAIM_REFUSALS: Record<string, string> = {
   not_found: 'No such task on the server (is the issue imported into the pool?).',
   not_participating: 'You do not participate in this project. Join it on the Discover page.',
   model_not_allowed: 'Your participation does not allow the model this task needs.',
+  write_access_required:
+    'Taking a task needs write access to the repository on GitHub (Write, Maintain or Admin). Ask the repository owner.',
   max_concurrency: 'The server says this machine already runs its maximum number of tasks.',
   not_approved: 'Your participation is waiting for the project owner to approve it.',
   already_taken: 'Someone else already took this task.',

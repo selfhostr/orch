@@ -308,7 +308,7 @@ If you only have read access, the tasks are created as PROPOSED and wait for a m
     {
       title: 'Take a task',
       description:
-        'Takes an open task yourself (manual mode): it is claimed for one of YOUR online, unpaused orch machines, which clones the repository and opens an interactive Claude Code session in a screen session. Returns the command to attach to it. Fails if none of your machines is online, if you are paused, if you do not participate in the project, or if the task is not open (taken, proposed or blocked by dependencies).',
+        'Takes an open task yourself (manual mode): it is claimed for one of YOUR online, unpaused orch machines, which clones the repository and opens an interactive Claude Code session in a screen session. Returns the command to attach to it. Fails if none of your machines is online, if you are paused, if you do not participate in the project, if GitHub does not give you write access to the repository, or if the task is not open (taken, proposed or blocked by dependencies).',
       inputSchema: TakeTaskInputSchema.shape,
     },
     async (args) =>

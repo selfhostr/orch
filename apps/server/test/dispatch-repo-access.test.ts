@@ -229,6 +229,35 @@ describe('agent side: private repository access', () => {
     expect(tok).toEqual({ ok: false, reason: 'access_denied' });
   });
 
+  it('manual take: a read-only member sees nothing to take and is refused, a writer is not', async () => {
+    for (const isPrivate of [true, false]) {
+      const w = await world(isPrivate ? 12 : 13);
+      await prisma.project.update({ where: { id: w.project.id }, data: { isPrivate } });
+      const svc = new TaskService({ prisma, config, github: w.gh });
+      const collab = await prisma.agent.findFirstOrThrow({
+        where: { userId: w.collabId, revokedAt: null },
+        include: { user: true },
+      });
+      const listed = (await svc.takeable(collab)).tasks;
+      expect(listed.length).toBeGreaterThan(0);
+      const target = { projectFullName: w.project.fullName, issueNumber: listed[0]!.issueNumber };
+
+      w.gh.roles.set(w.key(w.collabId), 'READ');
+      await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: w.collabId });
+      expect((await svc.takeable(collab)).tasks).toEqual([]);
+      const refused = await svc.claim(collab, target);
+      expect(refused.ack).toMatchObject({ ok: false, error: { code: 'write_access_required' } });
+      // MCP take_task goes through the same claim (initiated by the server).
+      const viaMcp = await svc.claim(collab, target, 'server');
+      expect(viaMcp.ack).toMatchObject({ ok: false, error: { code: 'write_access_required' } });
+
+      w.gh.roles.set(w.key(w.collabId), 'WRITE');
+      await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: w.collabId });
+      expect((await svc.takeable(collab)).tasks.map((t) => t.taskId)).toContain(listed[0]!.taskId);
+      expect((await svc.claim(collab, target)).ack.ok).toBe(true);
+    }
+  });
+
   it('a read-only member gets a clone token but never a push token', async () => {
     const w = await world(11);
     const svc = new TaskService({ prisma, config, github: w.gh });

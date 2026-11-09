@@ -15,7 +15,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Security
 
-- Tasks run only on the machines of members with write access (Write, Maintain or Admin) to the repository on GitHub, on public repositories too. Read-only collaborators, and server users let in by "All orch users on this server" or an allowlist, are no longer offered tasks, cannot accept an open offer and are refused a push token (`write_access_required`): a run's `contents: write` token let any participant push to every branch of the repository. See "Who can run tasks" in the concepts docs.
+- Tasks run only on the machines of members with write access (Write, Maintain or Admin) to the repository on GitHub, on public repositories too. Read-only collaborators, and server users let in by "All orch users on this server" or an allowlist, are no longer offered tasks, cannot accept an open offer, cannot take a task by hand (`orch take`, MCP `take_task`: `write_access_required`) and are refused a push token: a run's `contents: write` token let any participant push to every branch of the repository. See "Who can run tasks" in the concepts docs.
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
 
 ## 0.9.1 - 2026-11-04

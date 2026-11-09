@@ -1155,17 +1155,16 @@ export class TaskService {
     const active = parts.filter(
       (p) => participationStatus(p, p.project.requireParticipantApproval) === 'active',
     );
-    // Private repositories GitHub no longer lets the member into: nothing to take there.
+    // Taking a task means pushing its branch: nothing to take where GitHub does not give the
+    // member write access (public or private repository, see `mayRunTasks`).
     const memo = new RoleMemo();
     await memo.prime(
       this.prisma,
-      active.filter((p) => p.project.isPrivate).map((p) => p.projectId),
+      active.map((p) => p.projectId),
       [agent.userId],
     );
     const allowed = await Promise.all(
-      active.map((p) =>
-        repoAccessAllows(this.prisma, this.deps.github, p.project, agent.user, memo),
-      ),
+      active.map((p) => mayRunTasks(this.prisma, this.deps.github, p.project, agent.user, memo)),
     );
     const ok = active.filter((_, i) => allowed[i]);
     const rows = await this.prisma.task.findMany({
@@ -1227,6 +1226,14 @@ export class TaskService {
     if (!(await repoAccessAllows(prisma, this.deps.github, project, agent.user))) {
       return {
         ack: refuse('access_denied', 'GitHub no longer gives you access to this repository'),
+      };
+    }
+    if (!(await mayRunTasks(prisma, this.deps.github, project, agent.user))) {
+      return {
+        ack: refuse(
+          'write_access_required',
+          'Taking a task needs write access to the repository on GitHub (Write, Maintain or Admin)',
+        ),
       };
     }
     if (!part.allowedModels.includes(task.model)) {

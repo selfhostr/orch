@@ -224,7 +224,13 @@ export async function giveRole(
     include: { installation: true },
   });
   const key = `${p.installation.githubInstallationId}:${p.fullName}:${login}`;
-  if (!gh.roles.has(key)) gh.roles.set(key, role);
+  if (gh.roles.has(key)) return;
+  gh.roles.set(key, role);
+  // A role looked up earlier (cached as NONE) is asked again.
+  await prisma.projectPermission.updateMany({
+    where: { projectId, user: { login } },
+    data: { syncedAt: new Date(0) },
+  });
 }
 
 export interface TestUser {
