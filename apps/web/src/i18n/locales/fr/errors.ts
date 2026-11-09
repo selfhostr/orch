@@ -24,7 +24,7 @@ export default {
     offer_closed: 'Cette demande n’est plus disponible : elle a été prise, retirée ou a expiré.',
     paused: 'L’agent est en pause : le reprendre d’abord dans Mon serveur.',
     push_endpoint_taken:
-      'Ce navigateur reçoit déjà les notifications d’un autre membre : il doit d’abord les désactiver.',
+      'Ce navigateur reçoit déjà les notifications d’un autre membre : il doit d’abord les désactiver.',
     push_not_configured: 'Aucune clé VAPID n’est définie sur ce serveur.',
     server_version_unknown: 'Ce serveur exécute une version de développement.',
     task_cancelled: 'Cette tâche a été annulée.',
