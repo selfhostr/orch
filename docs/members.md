@@ -15,7 +15,7 @@ By the end, a teammate can sign in, join a project and has an agent connected to
 
    The token travels in an environment variable, not in a command-line argument, so it does not show up in the process list. The old `sh -s -- --token <token>` form still works but is deprecated.
 
-   This needs only Docker Engine 26+ with Compose, `curl` and `sh`. It writes `~/orch/compose.yaml` and `~/orch/.env`, enrolls the machine, starts the agent and installs an `orch` shortcut in `~/.local/bin/orch` (it tells you how to add that directory to your `PATH` if needed). Re-run it any time: it is idempotent and does not re-enroll (use `--force` for that). `--uninstall [--purge]` removes the stack and the shortcut.
+   This needs only Docker Engine 26+ with Compose (the installer checks the version and that your user can reach the daemon), `curl` and `sh`. It writes `~/orch/compose.yaml` and `~/orch/.env`, enrolls the machine, starts the agent and installs an `orch` shortcut in `~/.local/bin/orch` (it tells you how to add that directory to your `PATH` if needed). Re-run it any time: it is idempotent and does not re-enroll (use `--force` for that). `--uninstall [--purge]` removes the stack and the shortcut.
 
 5. **Link Claude.** At the end, in a terminal, the installer asks `Connect your Claude account now? [Y/n]`. Answer yes, open the URL it shows, sign in and paste the code back. `orch login` captures the long-lived token by itself; it is stored in the agent's `orch-secrets` volume on that machine (mode 0600) and never sent to the server. To do it later (or when installing without a terminal, or with `--yes`), run:
 
@@ -26,6 +26,10 @@ By the end, a teammate can sign in, join a project and has an agent connected to
    If a task fails because the Claude login expired or was revoked (`401 ... OAuth access token is invalid`), the agent remembers it in `claude-auth.json` in its data directory, tells the server (`claudeAuthValid: false`), refuses new AUTO offers and shows "Claude login expired" in `orch status`. The agent cannot check a token without calling Anthropic, so `orch login` simply marks the login valid again once the new token is stored; the running agent picks that up without a restart.
 
    The `orch` shortcut is `docker compose -f ~/orch/compose.yaml exec agent orch "$@"` (with a terminal attached when you have one), so every command in the {doc}`CLI reference <cli>` works as written.
+
+### Claude plan
+
+The agent starts its budget estimate from the plan declared in `ORCH_PLAN`: `pro` (default), `max5` or `max20`. A Max member who keeps `pro` gets a budget that is too low. `install.sh` takes the value from the `ORCH_PLAN` environment variable if it is set (`curl ... | ORCH_PLAN=max5 ORCH_TOKEN=<token> sh`), otherwise asks on a terminal, otherwise uses `pro` (`--yes` also skips the question). To change it later, edit `ORCH_PLAN` in `~/orch/.env` and run `docker compose -f ~/orch/compose.yaml up -d`; re-running the installer does not touch an existing `.env`.
 
 ### Installer options
 
@@ -39,7 +43,7 @@ By the end, a teammate can sign in, join a project and has an agent connected to
 | `--force`        | Re-enroll even if already enrolled                                                   |
 | `--uninstall`    | Stop and remove containers and volumes (and the `~/.local/bin/orch` shortcut)        |
 | `--purge`        | With `--uninstall`: also delete the install directory                                |
-| `--yes`          | Do not ask for confirmation (also skips the Claude login offer)                      |
+| `--yes`          | Do not ask for confirmation (also skips the plan question and the Claude login offer) |
 
 (updating-agents)=
 
