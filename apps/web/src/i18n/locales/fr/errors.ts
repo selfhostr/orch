@@ -5,6 +5,7 @@ export default {
   unknown: 'Une erreur est survenue.',
   network: 'Le serveur est injoignable. Vérifier la connexion, puis réessayer.',
   requestFailed: 'La requête a échoué ({status})',
+  requestFailedCode: 'La requête a échoué ({status}) : {code}',
   api: {
     access_suspended: 'L’accès à ce serveur a été retiré par un administrateur.',
     agent_offline: 'L’agent est hors ligne.',

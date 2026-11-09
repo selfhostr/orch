@@ -53,16 +53,23 @@ test('access admin: approve/deny/remove, pre-approve, invites, declined list; me
     .locator('.list-row', { hasText: 'yan' })
     .getByRole('button', { name: 'Deny' })
     .click();
+  await page
+    .getByRole('dialog', { name: 'Deny request' })
+    .getByRole('button', { name: 'Deny request' })
+    .click();
   await expect(page.getByText('yan denied')).toBeVisible();
   const add = page.getByLabel('Add a GitHub login');
   await add.fill('@carl');
   await page.getByRole('button', { name: 'Pre-approve' }).click();
   await expect(page.getByText('carl pre-approved')).toBeVisible();
-  page.once('dialog', (d) => d.accept());
   await page
     .getByRole('region', { name: 'Members' })
     .locator('.list-row', { hasText: 'carl' })
     .getByRole('button', { name: 'Remove' })
+    .click();
+  await page
+    .getByRole('dialog', { name: 'Remove member' })
+    .getByRole('button', { name: 'Remove member' })
     .click();
   await expect(page.getByText('carl removed')).toBeVisible();
   await page.getByRole('button', { name: 'Create invite link' }).click();
@@ -71,6 +78,10 @@ test('access admin: approve/deny/remove, pre-approve, invites, declined list; me
     .getByRole('region', { name: 'Invite links' })
     .getByRole('button', { name: 'Revoke' })
     .first()
+    .click();
+  await page
+    .getByRole('dialog', { name: 'Revoke invite link' })
+    .getByRole('button', { name: 'Revoke link' })
     .click();
   await expect(page.getByText('Invite link revoked')).toBeVisible();
   await page.getByText(/Declined \(/).click();

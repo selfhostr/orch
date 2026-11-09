@@ -3,6 +3,7 @@ export default {
   unknown: 'Something went wrong.',
   network: 'The server cannot be reached. Check your connection and try again.',
   requestFailed: 'Request failed ({status})',
+  requestFailedCode: 'Request failed ({status}): {code}',
   api: {
     access_suspended: 'Your access to this server was removed by an admin.',
     agent_offline: 'Agent is offline',

@@ -11,7 +11,11 @@ export default {
   card: {
     private: 'private',
     remove: 'Remove',
-    removeConfirm: 'Remove {name} from orch?',
+    removeConfirm:
+      'Its tasks and settings are deleted from orch. The GitHub repository is not touched.',
+    removeLabel: 'Remove project',
+    removeTitle: 'Remove {name}?',
+    removeAction: 'Remove project',
     saved: '{name} settings saved',
     removed: '{name} removed from orch',
     visibility: 'Visibility',

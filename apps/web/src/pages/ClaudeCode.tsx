@@ -10,7 +10,8 @@ import { createToken, fetchTokens, revokeToken } from '../api/endpoints';
 import { CopyButton } from '../components/CopyButton';
 import { McpCommand } from '../components/McpCommand';
 import { relative } from '../time';
-import { Modal, closeModal } from '../ui/Modal';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { closeModal } from '../ui/Modal';
 import { presenceProps, usePresence, type Phase } from '../ui/presence';
 import { useToast } from '../ui/Toast';
 import { t, useRich, useT } from '../i18n/index.ts';
@@ -163,28 +164,16 @@ function ConnectedApps() {
         </article>
       ))}
       {toRevoke && (
-        <Modal
+        <ConfirmDialog
           label={t('claudeCode.apps.revokeLabel')}
           title={t('claudeCode.apps.revokeTitle', { name: toRevoke.clientName })}
+          body={t('claudeCode.apps.revokeBody')}
+          confirmLabel={t('claudeCode.apps.confirm')}
+          pending={revoke.isPending}
+          error={revoke.error}
+          onConfirm={() => revoke.mutate(toRevoke)}
           onClose={() => setToRevoke(null)}
-          closeButton={false}
-          tone="danger"
-        >
-          <p>{t('claudeCode.apps.revokeBody')}</p>
-          {revoke.error && <p className="error">{errorMessage(revoke.error)}</p>}
-          <div className="modal-actions">
-            <button onClick={() => closeModal(() => setToRevoke(null))}>
-              {t('common.actions.cancel')}
-            </button>
-            <button
-              className="danger solid"
-              disabled={revoke.isPending}
-              onClick={() => revoke.mutate(toRevoke)}
-            >
-              {t('claudeCode.apps.confirm')}
-            </button>
-          </div>
-        </Modal>
+        />
       )}
     </>
   );
@@ -297,28 +286,16 @@ export function ClaudeCode() {
         <TokenRow key={key} token={item} onRevoke={setToRevoke} phase={phase} />
       ))}
       {toRevoke && (
-        <Modal
+        <ConfirmDialog
           label={t('claudeCode.tokens.revokeLabel')}
           title={t('claudeCode.tokens.revokeTitle', { name: toRevoke.name })}
+          body={t('claudeCode.tokens.revokeBody')}
+          confirmLabel={t('claudeCode.tokens.confirm')}
+          pending={revoke.isPending}
+          error={revoke.error}
+          onConfirm={() => revoke.mutate(toRevoke)}
           onClose={() => setToRevoke(null)}
-          closeButton={false}
-          tone="danger"
-        >
-          <p>{t('claudeCode.tokens.revokeBody')}</p>
-          {revoke.error && <p className="error">{errorMessage(revoke.error)}</p>}
-          <div className="modal-actions">
-            <button onClick={() => closeModal(() => setToRevoke(null))}>
-              {t('common.actions.cancel')}
-            </button>
-            <button
-              className="danger solid"
-              disabled={revoke.isPending}
-              onClick={() => revoke.mutate(toRevoke)}
-            >
-              {t('claudeCode.tokens.confirm')}
-            </button>
-          </div>
-        </Modal>
+        />
       )}
     </div>
   );

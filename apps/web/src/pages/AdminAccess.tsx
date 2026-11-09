@@ -15,6 +15,8 @@ import { CopyButton } from '../components/CopyButton';
 import { errorMessage } from '../i18n/errors.ts';
 import { formatDate } from '../i18n/format.ts';
 import { useT, type MessageKey } from '../i18n/index.ts';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { closeModal } from '../ui/Modal';
 import { presenceProps, usePresence } from '../ui/presence';
 import { useToast } from '../ui/Toast';
 
@@ -64,6 +66,12 @@ export function AdminAccess() {
   const [multiUse, setMultiUse] = useState(false);
   const [hours, setHours] = useState(24);
   const [created, setCreated] = useState<string | null>(null);
+  // The sensitive action waiting for a confirmation.
+  const [confirm, setConfirm] = useState<{
+    kind: 'remove' | 'deny' | 'revokeInvite';
+    id: string;
+    name: string;
+  } | null>(null);
   // One slot for the last failed action: starting any new action clears it, so an old failure
   // never lingers once something else has succeeded.
   const [actionError, setActionError] = useState<string | null>(null);
@@ -129,9 +137,16 @@ export function AdminAccess() {
   const approved = usePresence(d?.approved, (g) => g.id);
   const invites = usePresence(d?.invites, (i) => i.id);
   if (me && !me.isAdmin) return <p className="hint">{t('admin.adminsOnly')}</p>;
-  const remove = (g: AccessGrant) => {
-    if (window.confirm(t('admin.members.confirmRemove', { login: g.githubLogin })))
-      decide.mutate({ id: g.id, action: 'remove' });
+  const ask = (kind: 'remove' | 'deny' | 'revokeInvite', id: string, name: string) => {
+    decide.reset();
+    revoke.reset();
+    setConfirm({ kind, id, name });
+  };
+  const done = { onSuccess: () => closeModal(() => setConfirm(null)) };
+  const confirmNow = () => {
+    if (!confirm) return;
+    if (confirm.kind === 'revokeInvite') revoke.mutate(confirm.id, done);
+    else decide.mutate({ id: confirm.id, action: confirm.kind }, done);
   };
   const err = actionError ?? (access.error ? errorMessage(access.error) : null);
 
@@ -175,7 +190,7 @@ export function AdminAccess() {
                     <button
                       className="danger"
                       disabled={decide.isPending}
-                      onClick={() => decide.mutate({ id: g.id, action: 'deny' })}
+                      onClick={() => ask('deny', g.id, g.githubLogin)}
                     >
                       {t('admin.actions.deny')}
                     </button>
@@ -204,7 +219,7 @@ export function AdminAccess() {
                     <button
                       className="danger"
                       disabled={decide.isPending}
-                      onClick={() => remove(g)}
+                      onClick={() => ask('remove', g.id, g.githubLogin)}
                     >
                       {t('admin.actions.remove')}
                     </button>
@@ -292,7 +307,7 @@ export function AdminAccess() {
                         <button
                           className="danger"
                           disabled={revoke.isPending}
-                          onClick={() => revoke.mutate(i.id)}
+                          onClick={() => ask('revokeInvite', i.id, '')}
                         >
                           {t('admin.actions.revoke')}
                         </button>
@@ -344,6 +359,18 @@ export function AdminAccess() {
             </details>
           )}
         </>
+      )}
+      {confirm && (
+        <ConfirmDialog
+          label={t(`admin.confirm.${confirm.kind}.label`)}
+          title={t(`admin.confirm.${confirm.kind}.title`, { login: confirm.name })}
+          body={t(`admin.confirm.${confirm.kind}.body`, { login: confirm.name })}
+          confirmLabel={t(`admin.confirm.${confirm.kind}.action`)}
+          pending={decide.isPending || revoke.isPending}
+          error={confirm.kind === 'revokeInvite' ? revoke.error : decide.error}
+          onConfirm={confirmNow}
+          onClose={() => setConfirm(null)}
+        />
       )}
     </div>
   );
