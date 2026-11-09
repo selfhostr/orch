@@ -79,10 +79,9 @@ test('access admin: approve/deny/remove, pre-approve, invites, declined list; me
     .getByRole('button', { name: 'Revoke' })
     .first()
     .click();
-  await page
-    .getByRole('dialog', { name: 'Revoke invite link' })
-    .getByRole('button', { name: 'Revoke link' })
-    .click();
+  const revokeDialog = page.getByRole('dialog', { name: 'Revoke invite link' });
+  await expect(revokeDialog).toBeVisible({ timeout: 10_000 });
+  await revokeDialog.getByRole('button', { name: 'Revoke link' }).click({ timeout: 10_000 });
   await expect(page.getByText('Invite link revoked')).toBeVisible();
   await page.getByText(/Declined \(/).click();
   await settle(page);
