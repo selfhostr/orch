@@ -15,7 +15,16 @@ import {
   type ServerMessage,
   type TaskView,
 } from '@orch/shared';
-import { FakeGithub, api, loginAs, makeApp, prisma, repoFor, type TestUser } from './harness';
+import {
+  FakeGithub,
+  api,
+  giveRole,
+  loginAs,
+  makeApp,
+  prisma,
+  repoFor,
+  type TestUser,
+} from './harness';
 
 let gh: FakeGithub;
 let app: FastifyInstance;
@@ -172,6 +181,7 @@ async function participate(
     active?: boolean;
   } = {},
 ) {
+  await giveRole(gh, projectId, u.login);
   await prisma.participation.create({
     data: {
       userId: u.userId,

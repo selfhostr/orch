@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { HistoryResponseSchema, ProjectViewSchema, type HistoryResponse } from '@orch/shared';
 import {
+  giveRole,
   FakeGithub,
   api,
   loginAs,
@@ -33,6 +34,7 @@ async function project(owner: TestUser, isPrivate = false) {
 }
 
 async function participate(u: TestUser, projectId: string, over: object = {}) {
+  await giveRole(gh, projectId, u.login);
   await prisma.participation.create({
     data: {
       userId: u.userId,

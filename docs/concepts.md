@@ -16,6 +16,12 @@ Joining a project creates a **participation** with:
 
 Nobody, including project owners and admins, can set someone else's participation or bypass the mode.
 
+(who-runs)=
+
+### Who can run tasks
+
+Running a task pushes its branch to the repository, so the agent receives a GitHub installation token with `contents: write` on that one repository. orch therefore runs tasks only on the machines of members to whom GitHub gives write access to the repository (Write, Maintain or Admin), on public and private repositories alike. A member with Read or Triage access, or no access, can join a project (when its "Who can participate" setting allows it) and see its board, but is never offered its tasks, and an offer still open is refused when they lose write access. A push token is refused (`write_access_required`) to an agent whose member has no write access (any more); a clone token only needs read access. The "Who can participate" setting and the owner's per-member blocks only narrow this further: "All orch users on this server" or an allowlist entry does not give write access. The role is read from GitHub and cached for `ORCH_REPO_ACCESS_TTL_SEC` (see {doc}`security`).
+
 ## The pool
 
 The **pool** is the set of members who participate in a project and whose agents are online. The **Pool** page shows their availability (estimates). Tasks are offered to pool members; a member can also take a task directly with `orch take`.
@@ -59,7 +65,7 @@ Kanban columns on the Backlog page: **To do** = PROPOSED, BLOCKED, READY, OFFERE
 For each READY task the dispatcher (every 5 s by default) picks eligible candidates:
 
 1. all dependencies are `DONE`;
-2. the user has an active participation, is allowed in the project, and, for a targeted task, is among the targets;
+2. the user has an active participation, is allowed in the project, has **write access to the repository on GitHub** (Write, Maintain or Admin, see below) and, for a targeted task, is among the targets;
 3. their agent is online, not revoked and not paused, below its concurrency limit, and the model is allowed;
 4. their budget margin covers the task estimate, they are not rate limited, and they have not rejected or failed this task in the last 24 hours.
 

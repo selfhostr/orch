@@ -2,7 +2,7 @@ import type { Participation, Prisma, Project, ProjectPermission, User } from '@p
 import type { GithubRole, ParticipationView, ProjectView, ParticipationStatus } from '@orch/shared';
 import type { PrismaClient } from '../db';
 import type { GithubClient } from '../github';
-import { canParticipate } from './roles';
+import { canParticipate, canPush } from './roles';
 
 export const ROLE_CACHE_TTL_MS = 5 * 60 * 1000;
 export const DEFAULT_GRACE_MS = 15 * 60 * 1000;
@@ -123,6 +123,24 @@ export async function repoAccessAllows(
   if (info.role !== 'NONE') return true;
   if (project.addedById === user.id) return false;
   return canParticipate(project.participationPolicy, 'NONE', info);
+}
+
+/**
+ * May this member run the project's tasks? A run pushes its branch with a `contents: write`
+ * installation token, so GitHub must give the member write access (Write, Maintain or Admin),
+ * public repositories included, and the owner must not have blocked them. The dispatcher (offers
+ * and accept) and the push token use it. Without a GitHub client: true (participation rules only).
+ */
+export async function mayRunTasks(
+  prisma: PrismaClient,
+  github: GithubClient | undefined,
+  project: ProjectRef,
+  user: UserRef,
+  memo?: RoleMemo,
+): Promise<boolean> {
+  if (!github) return true;
+  const info = await getRoleInfo(prisma, github, project, user, memo);
+  return canPush(info.role) && info.canParticipate !== false;
 }
 
 export interface RoleInfo {

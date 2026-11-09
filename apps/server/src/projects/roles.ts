@@ -16,6 +16,14 @@ export function toOrchRole(role: GithubRole): MyRole {
   }
 }
 
+/**
+ * May this GitHub role push to the repository? Running a task pushes its branch with an
+ * installation token that has `contents: write`, so only these roles are offered tasks.
+ */
+export function canPush(role: GithubRole): boolean {
+  return role === 'ADMIN' || role === 'MAINTAIN' || role === 'WRITE';
+}
+
 export interface Overrides {
   canSubmit?: boolean | null;
   canParticipate?: boolean | null;

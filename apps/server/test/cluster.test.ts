@@ -238,8 +238,8 @@ describe('two instances, one database', () => {
       (await api(a, owner)('POST', '/api/projects', { githubRepoId: repo.githubRepoId })).json(),
     );
     member = await loginAs(a, gh);
-    // A participant of a private repository needs a GitHub role on it to be offered its tasks.
-    gh.roles.set(`${repo.installationId}:${repo.fullName}:${member.login}`, 'READ');
+    // Running a task needs GitHub write access to the repository (the run pushes a branch).
+    gh.roles.set(`${repo.installationId}:${repo.fullName}:${member.login}`, 'WRITE');
     await prisma.participation.create({
       data: {
         userId: member.userId,

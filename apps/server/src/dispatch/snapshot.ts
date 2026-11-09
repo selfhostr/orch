@@ -430,7 +430,7 @@ async function loadLastAssigned(
 export class TickSnapshot {
   /** Owner access decisions, asked once per member and tick. */
   readonly ownerAllowed = new Map<string, boolean>();
-  /** Repository access decisions (private repositories), asked once per (project, member) and tick. */
+  /** May the member run tasks there (write access), asked once per (project, member) and tick. */
   readonly repoAccess = new Map<string, boolean>();
 
   private constructor(
@@ -439,7 +439,7 @@ export class TickSnapshot {
     private readonly history: Map<string, TaskHistory[]>,
     private readonly usage: Map<string, UsageSnapshot>,
     private readonly lastAssigned: Map<string, Date>,
-    /** Cached GitHub roles of the participants of the private projects, read in one query. */
+    /** Cached GitHub roles of the participants of the tick's projects, read in one query. */
     readonly roles: RoleMemo,
   ) {}
 
@@ -481,10 +481,7 @@ export class TickSnapshot {
     ]);
     const ledger = await BudgetLedger.load(prisma, cfg, now, { userIds, usage, tasks });
     const roles = new RoleMemo();
-    const privateIds = [
-      ...new Set(tasks.filter((t) => t.project?.isPrivate).map((t) => t.projectId)),
-    ];
-    await roles.prime(prisma, privateIds, userIds);
+    await roles.prime(prisma, projectIds, userIds);
     return new TickSnapshot(
       ledger,
       groupBy(parts, (p) => p.projectId),

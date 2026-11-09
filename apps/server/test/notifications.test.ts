@@ -31,6 +31,7 @@ import {
   type PostResult,
 } from '../src/notifications/ssrf';
 import {
+  giveRole,
   FakeGithub,
   TEST_WEBHOOK_SECRET,
   api,
@@ -206,6 +207,7 @@ async function onlineAgent(user: TestUser): Promise<Member> {
 
 async function member(projectId: string, mode: 'AUTO' | 'APPROVAL' = 'AUTO'): Promise<Member> {
   const u = await loginAs(app, gh);
+  await giveRole(gh, projectId, u.login);
   await prisma.participation.create({
     data: { userId: u.userId, projectId, active: true, approvedAt: new Date(), percent: 50, mode },
   });
