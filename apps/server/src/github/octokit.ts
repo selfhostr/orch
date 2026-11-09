@@ -12,6 +12,19 @@ import type {
   GithubUserInfo,
   InstallationTokenScope,
 } from './client';
+import { PullRequestExistsError } from './client';
+
+/** The 422 GitHub answers when an open pull request already has the same head and base. */
+export function isPullRequestExists(err: unknown): boolean {
+  const e = err as {
+    status?: number;
+    message?: string;
+    response?: { data?: { errors?: Array<{ message?: string }> } };
+  };
+  if (e.status !== 422) return false;
+  const texts = [e.message ?? '', ...(e.response?.data?.errors ?? []).map((x) => x.message ?? '')];
+  return texts.some((t) => /a pull request already exists/i.test(t));
+}
 
 export interface OctokitGithubOptions {
   appId: string;
@@ -237,33 +250,52 @@ export class OctokitGithubClient implements GithubClient {
     input: CreatePullRequestInput,
   ): Promise<{ number: number; htmlUrl: string }> {
     const { owner, repo } = splitFullName(fullName);
-    const { data } = await this.forInstallation(installationId).rest.pulls.create({
-      owner,
-      repo,
-      head: input.head,
-      base: input.base,
-      title: input.title,
-      body: input.body,
-      draft: input.draft,
-    });
-    return { number: data.number, htmlUrl: data.html_url };
+    try {
+      const { data } = await this.forInstallation(installationId).rest.pulls.create({
+        owner,
+        repo,
+        head: input.head,
+        base: input.base,
+        title: input.title,
+        body: input.body,
+        draft: input.draft,
+      });
+      return { number: data.number, htmlUrl: data.html_url };
+    } catch (err) {
+      if (isPullRequestExists(err)) throw new PullRequestExistsError();
+      throw err;
+    }
   }
 
   async findOpenPullRequest(
     installationId: number,
     fullName: string,
     head: string,
+    base: string,
   ): Promise<{ number: number; htmlUrl: string } | null> {
     const { owner, repo } = splitFullName(fullName);
     const { data } = await this.forInstallation(installationId).rest.pulls.list({
       owner,
       repo,
       head: `${owner}:${head}`,
+      base,
       state: 'open',
       per_page: 1,
     });
     const pr = data[0];
     return pr ? { number: pr.number, htmlUrl: pr.html_url } : null;
+  }
+
+  async closePullRequest(
+    installationId: number,
+    fullName: string,
+    number: number,
+    comment: string,
+  ): Promise<void> {
+    const { owner, repo } = splitFullName(fullName);
+    const api = this.forInstallation(installationId).rest;
+    await api.issues.createComment({ owner, repo, issue_number: number, body: comment });
+    await api.pulls.update({ owner, repo, pull_number: number, state: 'closed' });
   }
 
   async getBranchSha(

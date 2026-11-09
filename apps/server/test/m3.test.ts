@@ -690,7 +690,7 @@ describe('progress racing a lost lease', () => {
   });
 
   it('task.pushed does not mark a lost run PUSHED nor its task IN_REVIEW', async () => {
-    const { agent, t, offer } = await running();
+    const { agent, t, offer, repo } = await running();
     loseAfterNextRead();
     const ack = await agent.client.call(
       agentMessage('task.pushed', {
@@ -705,6 +705,18 @@ describe('progress racing a lost lease', () => {
     expect(ack.error?.code).toBe('assignment_not_live');
     expect(await state(offer.assignmentId, t.id)).toEqual({ assignment: 'LOST', task: 'TODO' });
     expect((await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).prNumber).toBeNull();
+    // The pull request opened for the lost run is closed with a comment saying why.
+    const orphan = gh.pullRequests.find(
+      (p) => p.fullName === repo.fullName && p.head === offer.task.branchName,
+    )!;
+    const closed = gh.closedPullRequests.find(
+      (c) => c.fullName === repo.fullName && c.number === orphan.number,
+    );
+    expect(closed?.comment).toContain('declared lost');
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { taskId: t.id, action: 'task.pr_orphaned' },
+    });
+    expect(audit.data).toMatchObject({ prNumber: orphan.number, closed: true });
   });
 
   it('task.finished does not rewrite a lost run as succeeded', async () => {
@@ -759,6 +771,36 @@ describe('progress racing a lost lease', () => {
         status: 'IN_REVIEW',
         prNumber: first.number,
       });
+    } finally {
+      gh.rejectDuplicatePullRequests = false;
+    }
+  });
+
+  it('task.pushed does not take over an open PR of the same branch into another base', async () => {
+    const { agent, t, offer, repo } = await running();
+    gh.rejectDuplicatePullRequests = true;
+    try {
+      const other = await gh.createPullRequest(1, repo.fullName, {
+        head: offer.task.branchName,
+        base: 'release',
+        title: 'by hand',
+        body: 'x',
+        draft: false,
+      });
+      const ack = await agent.client.call(
+        agentMessage('task.pushed', {
+          assignmentId: offer.assignmentId,
+          seq: 1,
+          branch: offer.task.branchName,
+          headSha: 'abc123',
+          changedFiles: 1,
+          summary: 's',
+        }),
+      );
+      expect(ack.ok).toBe(true);
+      const row = await prisma.task.findUniqueOrThrow({ where: { id: t.id } });
+      expect(row.prNumber).not.toBeNull();
+      expect(row.prNumber).not.toBe(other.number);
     } finally {
       gh.rejectDuplicatePullRequests = false;
     }

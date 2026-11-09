@@ -20,7 +20,7 @@ import {
 import { audit } from '../audit';
 import type { Config } from '../config';
 import type { PrismaClient } from '../db';
-import type { GithubClient, GithubIssue } from '../github';
+import { PullRequestExistsError, type GithubClient, type GithubIssue } from '../github';
 import { HttpError } from '../http/errors';
 import { canSubmit as roleCanSubmit, toOrchRole } from '../projects/roles';
 import { RoleMemo, getRoleInfo, participationStatus, repoAccessAllows } from '../projects/service';
@@ -72,6 +72,11 @@ export interface Access {
 /** Task statuses that count as "pending" for the per-creator limit. */
 export const PENDING_STATUSES: TaskStatus[] = ['PROPOSED', 'TODO'];
 const LIVE_ASSIGNMENT = ['ACCEPTED', 'RUNNING', 'PUSHED'] as const;
+
+/** Comment left on a pull request closed because its run was lost before it was recorded. */
+const ORPHAN_PR_COMMENT =
+  'Closed by orch: the run that opened this pull request was declared lost (its lease ended) ' +
+  'before the pull request was recorded, and the task went back to the pool. Another run replaces it.';
 const EDITABLE: TaskStatus[] = ['PROPOSED', 'TODO'];
 
 const toTaskUser = (u: User): TaskUser => ({
@@ -1510,19 +1515,22 @@ export class TaskService {
     const github = this.deps.github;
     const installationId = Number(task.project.installation.githubInstallationId);
     const fullName = task.project.fullName;
+    const base = task.integrationBranch ?? task.baseBranch;
+    let created = true;
     const pr = await github
       .createPullRequest(installationId, fullName, {
         head: p.branch,
-        base: task.integrationBranch ?? task.baseBranch,
+        base,
         title: task.title,
         body: buildPrBody(task, creator.login, agent.user.login, a.execMode ?? 'MANUAL', p),
         draft,
       })
       .catch(async (err: unknown) => {
         // Opened by an earlier delivery of this message whose write below failed: reuse it.
-        if ((err as { status?: number }).status !== 422) throw err;
-        const open = await github.findOpenPullRequest(installationId, fullName, p.branch);
+        if (!(err instanceof PullRequestExistsError)) throw err;
+        const open = await github.findOpenPullRequest(installationId, fullName, p.branch, base);
         if (!open) throw err;
+        created = false;
         return open;
       });
     // Guarded like the other progress writes: a run lost meanwhile stays lost, and its task
@@ -1539,7 +1547,19 @@ export class TaskService {
       });
       return true;
     });
-    if (!recorded) return { ack: await this.changedMeanwhile(agent, p.assignmentId, p.seq) };
+    if (!recorded) {
+      // The run was lost meanwhile (the task went back to the pool): the pull request just opened
+      // for it belongs to nothing. One reused from an earlier delivery is left as it is.
+      let closed = false;
+      if (created) {
+        closed = await github
+          .closePullRequest(installationId, fullName, pr.number, ORPHAN_PR_COMMENT)
+          .then(() => true)
+          .catch(() => false);
+      }
+      await this.agentAudit(agent, 'task.pr_orphaned', a, { prNumber: pr.number, closed });
+      return { ack: await this.changedMeanwhile(agent, p.assignmentId, p.seq) };
+    }
     await this.agentAudit(agent, 'task.pushed', a, {
       branch: p.branch,
       headSha: p.headSha,
