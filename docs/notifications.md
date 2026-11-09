@@ -174,7 +174,7 @@ With browser notifications (Web Push), orch shows a system notification on your 
 2. In the table below, tick **Browser** for the events you want. Without a tick, nothing is sent.
 3. Use **Send test** to check.
 
-It is set up per browser: repeat step 1 on each device you want (up to 10 per member; the oldest is dropped beyond that). Switching the toggle off, or removing the site permission in the browser, stops notifications on that browser.
+It is set up per browser: repeat step 1 on each device you want (up to 10 per member; the oldest is dropped beyond that). Switching the toggle off, or removing the site permission in the browser, stops notifications on that browser. A browser receives the notifications of one member only: if someone else already switched them on in it, they must switch them off before you can (the server answers `409 push_endpoint_taken`).
 
 - **iPhone and iPad** only support Web Push for apps added to the Home Screen: install orch first ({doc}`usage`, "Install as an app").
 - If you blocked notifications for the site earlier, the browser will not ask again: allow them in the browser's site settings.

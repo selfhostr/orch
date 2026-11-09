@@ -172,16 +172,24 @@ describe('subscribe / unsubscribe', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('moves an endpoint to the member who signed in on that browser last', async () => {
+  it("refuses (409) an endpoint that belongs to another member and leaves it theirs", async () => {
     const a = await loginAs(app, gh);
     const b = await loginAs(app, gh);
     const ep = endpoint();
     await subscribe(a, ep);
-    await subscribe(b, ep);
-    expect(await subs(a.userId)).toHaveLength(0);
-    expect(await subs(b.userId)).toHaveLength(1);
-    // The previous owner cannot remove it any more.
+    const res = await api(app, b)('POST', '/api/notifications/push/subscribe', {
+      endpoint: ep,
+      keys: { p256dh: randomBytes(65).toString('base64url'), auth: randomBytes(16).toString('base64url') },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ error: { code: 'push_endpoint_taken' } });
+    const kept = await subs(a.userId);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({ endpoint: ep, p256dh: KEYS.p256dh, auth: KEYS.auth });
+    expect(await subs(b.userId)).toHaveLength(0);
+    // Once the owner switches it off on that browser, the other member can use it.
     await api(app, a)('POST', '/api/notifications/push/unsubscribe', { endpoint: ep });
+    expect((await subscribe(b, ep)).statusCode).toBe(200);
     expect(await subs(b.userId)).toHaveLength(1);
   });
 
