@@ -19,8 +19,8 @@ import {
 } from '@orch/shared';
 import pg from 'pg';
 import { encrypt } from '../src/auth/crypto';
-import { CLAIM_UNCONFIRMED_MS } from '../src/agents/gateway';
 import { channelOf, lockClassOf } from '../src/cluster';
+import { SHUT_OUT } from '../src/dispatch/snapshot';
 import { SharedCounter, SharedRateLimiter } from '../src/http/shared-limit';
 import { LiveLogStore } from '../src/logs/store';
 import type { PostResult } from '../src/notifications/ssrf';
@@ -658,7 +658,15 @@ describe('two instances: a relayed claim without an answer', () => {
     });
   const lapse = (now: Date) =>
     (e.dispatcher as unknown as { expireLeases(now: Date): Promise<void> }).expireLeases(now);
-  const later = () => new Date(Date.now() + CLAIM_UNCONFIRMED_MS + 60_000);
+  // After the claim's lease (AGENT_LEASE_SEC, 30 min by default).
+  const later = () => new Date(Date.now() + 2 * 3600_000);
+  /** Ended without excluding the member: CANCELLED (not LOST, which SHUT_OUT counts). */
+  async function expectNeutralUndo(assignmentId: string, taskId: string) {
+    const row = await prisma.assignment.findUniqueOrThrow({ where: { id: assignmentId } });
+    expect(row.status).toBe('CANCELLED');
+    expect(SHUT_OUT as readonly string[]).not.toContain(row.status);
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: taskId } })).status).toBe('TODO');
+  }
 
   it('keeps the claim and lets the agent confirm it with its first report', async () => {
     const t = await newTask();
@@ -693,10 +701,21 @@ describe('two instances: a relayed claim without an answer', () => {
     await reconnect(agent.credential, f);
     await until(
       async () =>
-        (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status ===
-        'LOST',
+        (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status !==
+        'ACCEPTED',
     );
-    expect((await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status).toBe('TODO');
+    await expectNeutralUndo(r.assignmentId, t.id);
+    // The member can take it again at once.
+    noAnswer(false);
+    const again = await take(t);
+    expect(again.ok).toBe(true);
+    if (again.ok) {
+      await prisma.assignment.update({
+        where: { id: again.assignmentId },
+        data: { status: 'FAILED' },
+      });
+      await prisma.task.update({ where: { id: t.id }, data: { status: 'DONE' } });
+    }
   });
 
   it('gives the task back when the bounded wait ends without any report', async () => {
@@ -709,11 +728,13 @@ describe('two instances: a relayed claim without an answer', () => {
     expect(
       (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status,
     ).toBe('ACCEPTED');
-    await lapse(later());
+    // Not before the agent lease: an agent offline for less keeps the run.
+    await lapse(new Date(Date.now() + 20 * 60_000));
     expect(
       (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status,
-    ).toBe('LOST');
-    expect((await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status).toBe('TODO');
+    ).toBe('ACCEPTED');
+    await lapse(later());
+    await expectNeutralUndo(r.assignmentId, t.id);
   });
 });
 

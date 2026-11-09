@@ -50,12 +50,6 @@ interface Conn {
 /** How long an offer relayed to the instance holding the agent's socket may take. */
 const OFFER_RELAY_TIMEOUT_MS = 5_000;
 
-/**
- * A manual claim whose relayed offer got no answer: how long it may wait for the agent's first
- * progress report before it goes back to the pool (see the dispatcher's leases).
- */
-export const CLAIM_UNCONFIRMED_MS = 10 * 60_000;
-
 /** A duplicate seen this recently without a stored ack is still being processed (no answer). */
 const DUPLICATE_IN_FLIGHT_MS = 5 * 60_000;
 
@@ -554,7 +548,7 @@ export class AgentGateway {
    * it with `task.offer` kind CLAIM, `initiatedBy: "server"`. If the offer cannot be delivered the
    * claim is undone (task back to TODO). A relayed offer without an answer keeps the claim, with a
    * lease: the agent's first progress report confirms it, a `hello` without it or the lease's end
-   * gives the task back (see the dispatcher).
+   * cancels it without excluding the member (see the dispatcher's undoUnconfirmedClaim).
    */
   async claimForUser(
     userId: string,
@@ -619,7 +613,11 @@ export class AgentGateway {
       if (err.reason === 'unconfirmed') {
         await prisma.assignment.updateMany({
           where: { id: offer.assignmentId, status: 'ACCEPTED', startedAt: null },
-          data: { leaseExpiresAt: new Date(Date.now() + CLAIM_UNCONFIRMED_MS) },
+          // As long as an agent may stay silent before it counts as gone (AGENT_LEASE_SEC): an
+          // agent offline meanwhile, with its first report waiting in its outbox, keeps the run.
+          data: {
+            leaseExpiresAt: new Date(Date.now() + this.deps.config.AGENT_LEASE_SEC * 1000),
+          },
         });
         await audit(prisma, {
           actorUserId: userId,

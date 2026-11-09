@@ -103,6 +103,11 @@ export function notParticipatingBackoffMs(rejections: number): number {
  */
 export const FAILED_RETRIES_BEFORE_SHUT_OUT = 5;
 
+/** A manual claim still waiting for the agent to confirm a relayed offer (see the gateway). */
+function isUnconfirmedClaim(a: Assignment): boolean {
+  return a.kind === 'CLAIM' && a.status === 'ACCEPTED' && !a.startedAt && !!a.leaseExpiresAt;
+}
+
 const CLAUDE_LOGIN_EXPIRED = 'Claude login expired: run `orch login`';
 
 const isNotParticipating = (a: { status: string; reason: string | null }) =>
@@ -1064,7 +1069,10 @@ export class Dispatcher {
         NOT: { kind: 'CLAIM', startedAt: { not: null } },
       },
     });
-    for (const a of lapsed) await this.lose(a, 'timeout', now);
+    for (const a of lapsed) {
+      if (isUnconfirmedClaim(a)) await this.undoUnconfirmedClaim(a, 'timeout', now);
+      else await this.lose(a, 'timeout', now);
+    }
     const cutoff = new Date(now.getTime() - this.deps.config.AGENT_LEASE_SEC * 1000);
     const orphaned = await this.prisma.assignment.findMany({
       where: {
@@ -1074,8 +1082,49 @@ export class Dispatcher {
     });
     for (const a of orphaned) {
       if (a.agentId && this.gateway.isConnected(a.agentId)) continue;
-      await this.lose(a, 'agent_offline', now);
+      if (isUnconfirmedClaim(a)) await this.undoUnconfirmedClaim(a, 'agent_offline', now);
+      else await this.lose(a, 'agent_offline', now);
     }
+  }
+
+  /**
+   * A manual claim whose relayed offer was never confirmed goes back to the pool as CANCELLED, not
+   * LOST: a delivery failure does not shut the member out of the task (SHUT_OUT).
+   */
+  private async undoUnconfirmedClaim(a: Assignment, reason: string, now: Date): Promise<void> {
+    const done = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.assignment.updateMany({
+        where: { id: a.id, kind: 'CLAIM', status: 'ACCEPTED', startedAt: null },
+        data: {
+          status: 'CANCELLED',
+          reason: `undelivered:${reason}`,
+          finishedAt: now,
+          cleanupPending: true,
+        },
+      });
+      if (r.count !== 1) return false;
+      await tx.task.updateMany({
+        where: { id: a.taskId, status: 'IN_PROGRESS', assigneeAgentId: a.agentId },
+        data: { status: 'TODO', assigneeId: null, assigneeAgentId: null },
+      });
+      return true;
+    });
+    if (!done) return;
+    await audit(this.prisma, {
+      actorType: 'SYSTEM',
+      action: 'task.claim_undone',
+      taskId: a.taskId,
+      targetUserId: a.userId,
+      agentId: a.agentId ?? undefined,
+      data: { assignmentId: a.id, reason: `undelivered:${reason}` },
+    });
+    if (a.agentId) {
+      this.gateway.sendTo(
+        a.agentId,
+        serverMessage('task.cancel', { assignmentId: a.id, reason: 'undelivered' }),
+      );
+    }
+    this.kick();
   }
 
   /** LOST: the run is abandoned and the task goes back to the pool. */
@@ -1425,7 +1474,7 @@ export class Dispatcher {
       },
     });
     for (const a of unconfirmed) {
-      if (!known.has(a.id)) await this.lose(a, 'undelivered', now);
+      if (!known.has(a.id)) await this.undoUnconfirmedClaim(a, 'not_running', now);
     }
     const resend = await prisma.assignment.findMany({
       where: {
