@@ -6,6 +6,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Added
 
+- The CI job "Licences and advisories" also runs `pnpm audit --prod --audit-level=high` (high and critical advisories in production dependencies fail the build).
 - A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm run check:licences`).
 - The README states that the agent image installs Claude Code, which is proprietary software from Anthropic, and that orch itself is MIT.
 
@@ -15,6 +16,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Security
 
+- `glob` and `minimatch` are forced to patched versions (GHSA-3g3m-2fjr-6pw4, GHSA-g3hv-75wg-m249) through `overrides` in `pnpm-workspace.yaml`.
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
 
 ## 0.9.1 - 2026-11-04
