@@ -433,9 +433,8 @@ describe('recipients who lost access', { timeout: 20_000 }, () => {
     const creator = await loginAs(app, gh);
     gh.roles.set(`4242:${repo.fullName}:${creator.login}`, 'WRITE');
     const m = await member(p.id);
-    // The runner can read the private repository (a participant without a GitHub role gets no
-    // offer on a private repository with the default policy).
-    gh.roles.set(`4242:${repo.fullName}:${m.user.login}`, 'READ');
+    // The runner has write access to the private repository (running a task needs it).
+    gh.roles.set(`4242:${repo.fullName}:${m.user.login}`, 'WRITE');
     const t = await createTask(creator, p.id, 'Secret thing');
     // The creator is removed from the repository; the cached role expires.
     gh.roles.set(`4242:${repo.fullName}:${creator.login}`, 'NONE');
