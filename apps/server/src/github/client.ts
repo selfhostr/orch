@@ -41,6 +41,13 @@ export interface CreateIssueInput {
   labels: string[];
 }
 
+/** GitHub refused to open a pull request: one is already open for the same head and base. */
+export class PullRequestExistsError extends Error {
+  constructor() {
+    super('A pull request already exists for this head and base');
+  }
+}
+
 export interface CreatePullRequestInput {
   head: string;
   base: string;
@@ -83,11 +90,26 @@ export interface GithubClient {
     installationId: number,
     scope: InstallationTokenScope,
   ): Promise<{ token: string; expiresAt: Date }>;
+  /** Throws PullRequestExistsError when one is already open for the same head and base. */
   createPullRequest(
     installationId: number,
     fullName: string,
     input: CreatePullRequestInput,
   ): Promise<{ number: number; htmlUrl: string }>;
+  /** The open pull request from `head` (a branch of the repository) into `base`, or null. */
+  findOpenPullRequest(
+    installationId: number,
+    fullName: string,
+    head: string,
+    base: string,
+  ): Promise<{ number: number; htmlUrl: string } | null>;
+  /** Comments on a pull request, then closes it. */
+  closePullRequest(
+    installationId: number,
+    fullName: string,
+    number: number,
+    comment: string,
+  ): Promise<void>;
   /** M5: head commit of a branch, or null when it does not exist. */
   getBranchSha(installationId: number, fullName: string, branch: string): Promise<string | null>;
   /** M5: creates a branch at a commit (no error when it already exists). */
