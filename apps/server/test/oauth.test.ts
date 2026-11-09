@@ -281,6 +281,21 @@ describe('dynamic client registration', () => {
     ).toBe(400);
     expect((await register(custom, { redirect_uris: [REDIRECT] })).statusCode).toBe(201);
     await custom.close();
+    const listedPort = makeApp(gh, { env: { ORCH_OAUTH_REDIRECT_HOSTS: 'app.example.org:443' } });
+    expect(
+      (await register(listedPort, { redirect_uris: ['https://app.example.org/cb'] })).statusCode,
+    ).toBe(201);
+    await listedPort.close();
+    const loopbackOnly = makeApp(gh, { env: { ORCH_OAUTH_REDIRECT_HOSTS: 'none' } });
+    const refused = await register(loopbackOnly, {
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+    });
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json<{ error_description: string }>().error_description).toContain(
+      'no https host allowed',
+    );
+    expect((await register(loopbackOnly, { redirect_uris: [REDIRECT] })).statusCode).toBe(201);
+    await loopbackOnly.close();
   });
 
   it('rate limits /register and /token per client IP', async () => {

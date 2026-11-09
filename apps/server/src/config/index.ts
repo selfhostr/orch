@@ -46,7 +46,8 @@ const ConfigSchema = z.object({
    * Hosts an MCP OAuth client may use as an https redirect_uri (comma-separated host names,
    * optionally with `:port`, compared exactly: no wildcard, no suffix match). Loopback http
    * (127.0.0.1, [::1], localhost, any port) is always accepted, as RFC 8252 asks. The default
-   * keeps the Claude web connectors working.
+   * keeps the Claude web connectors working; `none` allows no https host (loopback only). `:443`
+   * is dropped, as URLs carry no default port.
    */
   ORCH_OAUTH_REDIRECT_HOSTS: z.preprocess(
     emptyToUndefined,
@@ -54,10 +55,12 @@ const ConfigSchema = z.object({
       .string()
       .default('claude.ai,claude.com')
       .transform((v) =>
-        v
-          .split(',')
-          .map((s) => s.trim().toLowerCase())
-          .filter(Boolean),
+        v.trim().toLowerCase() === 'none'
+          ? []
+          : v
+              .split(',')
+              .map((s) => s.trim().toLowerCase().replace(/:443$/, ''))
+              .filter(Boolean),
       )
       .pipe(
         z.array(

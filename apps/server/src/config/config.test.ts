@@ -69,6 +69,12 @@ describe('public URL and proxy trust', () => {
       loadConfig({ ...base, ORCH_OAUTH_REDIRECT_HOSTS: ' Claude.ai , app.example.org:8443 ' })
         .ORCH_OAUTH_REDIRECT_HOSTS,
     ).toEqual(['claude.ai', 'app.example.org:8443']);
+    // URL.host never carries the default port, so `:443` is dropped to still match.
+    const port = loadConfig({ ...base, ORCH_OAUTH_REDIRECT_HOSTS: 'claude.ai:443' });
+    expect(port.ORCH_OAUTH_REDIRECT_HOSTS).toEqual(['claude.ai']);
+    // `none`: loopback only, no https host.
+    const none = loadConfig({ ...base, ORCH_OAUTH_REDIRECT_HOSTS: ' None ' });
+    expect(none.ORCH_OAUTH_REDIRECT_HOSTS).toEqual([]);
     for (const bad of ['https://claude.ai', '*.claude.ai', 'claude.ai/cb', '.claude.ai', 'a b']) {
       expect(() => loadConfig({ ...base, ORCH_OAUTH_REDIRECT_HOSTS: bad })).toThrow(
         /ORCH_OAUTH_REDIRECT_HOSTS/,
