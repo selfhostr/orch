@@ -721,9 +721,8 @@ export class AgentGateway {
       await prisma.agentMessageSeen.create({ data: { agentId: c.agentId, messageId: m.id } });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        return this.ackDuplicate(c, m.id);
-      }
-      throw err;
+        if (!(await this.ackDuplicate(c, m.id))) return;
+      } else throw err;
     }
     let result: AckPayload;
     const after: Array<() => void> = [];
@@ -745,19 +744,31 @@ export class AgentGateway {
 
   /**
    * Replays the first answer. Still being processed: no ack, the agent outbox resends later.
-   * A row without a stored ack long after it was seen (written before acks were stored, or the
-   * process died mid-way) keeps the old plain duplicate answer.
+   * A row without a stored ack long after it was seen means the process died mid-way: the resend
+   * takes the row over and the message is processed again (the handlers are idempotent). Returns
+   * true when the caller must process it. Only one of two concurrent resends wins the takeover.
    */
-  private async ackDuplicate(c: Conn, messageId: string): Promise<void> {
-    const seen = await this.deps.prisma.agentMessageSeen.findUnique({
+  private async ackDuplicate(c: Conn, messageId: string): Promise<boolean> {
+    const { prisma } = this.deps;
+    const seen = await prisma.agentMessageSeen.findUnique({
       where: { agentId_messageId: { agentId: c.agentId, messageId } },
     });
-    if (seen?.ack) {
+    if (!seen) return false; // Processing failed and the row was removed: the next resend runs.
+    if (seen.ack) {
       this.ack(c, messageId, { ...(seen.ack as AckPayload), duplicate: true });
-      return;
+      return false;
     }
-    if (seen && Date.now() - seen.seenAt.getTime() < DUPLICATE_IN_FLIGHT_MS) return;
-    this.ack(c, messageId, { ok: true, duplicate: true });
+    if (Date.now() - seen.seenAt.getTime() < DUPLICATE_IN_FLIGHT_MS) return false;
+    const taken = await prisma.agentMessageSeen.updateMany({
+      where: {
+        agentId: c.agentId,
+        messageId,
+        seenAt: seen.seenAt,
+        ack: { equals: Prisma.DbNull },
+      },
+      data: { seenAt: new Date() },
+    });
+    return taken.count === 1;
   }
 
   /**
