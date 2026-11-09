@@ -1,9 +1,10 @@
 /**
  * REAL Claude login check (v0.5.2): runs one tiny `claude -p` request with the stored token in a
  * throwaway container built like a task container (same hardening, same env, binary copied in),
- * then classifies the outcome. The token is passed by NAME only (`-e CLAUDE_CODE_OAUTH_TOKEN`),
- * its value lives in the docker CLI child's environment; it never appears in argv, logs, files or
- * the result (`detail` is redacted and the token value is masked explicitly as well).
+ * then classifies the outcome. The token is given to the `docker exec` of Claude only, by NAME
+ * (`-e CLAUDE_CODE_OAUTH_TOKEN`), its value in the docker CLI child's environment; it is not in the
+ * container config (`docker inspect`) and never appears in argv, logs, files or the result
+ * (`detail` is redacted and the token value is masked explicitly as well).
  */
 import { randomBytes } from 'node:crypto';
 import { accessSync, constants as fsConstants, readFileSync, statSync } from 'node:fs';
@@ -13,7 +14,7 @@ import { hashClaudeToken } from './claude-auth';
 import type { DockerOps } from './exec/docker';
 import { AGENT_LABEL } from './exec/naming';
 import type { CommandRunner } from './exec/runner';
-import { CLAUDE_TOKEN_ENV, sandboxEnvArgs } from './exec/sandbox';
+import { CLAUDE_TOKEN_EXEC_ARGS, claudeTokenEnv, sandboxEnvArgs } from './exec/sandbox';
 import { errorMessage, redact } from './log';
 
 /** Label carried by every check container (cleanup finds leftovers with it). */
@@ -313,15 +314,14 @@ export async function checkClaudeAuth(
   let step: Parameters<typeof classifyDockerFailure>[0] = 'create';
   try {
     const args = buildCheckCreateArgs(name, cfg);
-    const env = { [CLAUDE_TOKEN_ENV]: token };
     try {
-      await deps.docker.create(args, env);
+      await deps.docker.create(args);
     } catch (err) {
       if (!/No such image|not found|pull access denied/i.test(errorMessage(err))) throw err;
       step = 'pull';
       await deps.docker.pull(cfg.image);
       step = 'create';
-      await deps.docker.create(args, env);
+      await deps.docker.create(args);
     }
     step = 'copy';
     await deps.docker.copyIn(name, cfg.claudeBin);
@@ -331,10 +331,8 @@ export async function checkClaudeAuth(
     const started = Date.now();
     const r = await deps.runner.run(
       deps.dockerBin ?? 'docker',
-      ['exec', name, ...checkArgv(cfg.claudeBin)],
-      {
-        timeoutMs,
-      },
+      ['exec', ...CLAUDE_TOKEN_EXEC_ARGS, name, ...checkArgv(cfg.claudeBin)],
+      { timeoutMs, env: claudeTokenEnv(token) },
     );
     // Only the output of Claude itself is classified (it may prove the token valid).
     c = classifyCheck({ ...r, timedOut: r.code !== 0 && Date.now() - started >= timeoutMs - 50 });

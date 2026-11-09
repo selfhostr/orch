@@ -15,6 +15,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Security
 
+- The Claude token is no longer part of the task container (agent). It was passed to `docker create`, so it showed in `docker inspect` and in the environment of the repository's `postCreateCommand` and of `orch shell`, which could read it without any prompt injection. It is now passed only to the `docker exec` that starts Claude (auto run, manual session, re-created session, login check), by name. Processes left running by `postCreateCommand` are stopped before Claude starts; the task fails if they cannot be. Once Claude runs, the commands it starts still inherit the token (see the security model).
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
 
 ## 0.9.1 - 2026-11-04
