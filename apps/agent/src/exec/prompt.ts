@@ -8,17 +8,80 @@ import type { TaskOfferPayload } from '@orch/shared';
 export const ISSUE_BEGIN = '<<<ORCH_ISSUE_BEGIN>>>';
 export const ISSUE_END = '<<<ORCH_ISSUE_END>>>';
 const MAX_PROMPT = 100_000;
-/** Any spelling of either delimiter (case, inner spaces), so no field can open or close the data block. */
-const MARKER_RE = /<<<\s*ORCH_ISSUE_(?:BEGIN|END)\s*>>>/gi;
+/**
+ * Lookalikes of the delimiters, matched on a folded copy of the text (see `foldChar`): two or
+ * more chevrons, any case, spaces, underscores, dashes or dots between the words.
+ */
+const MARKER_RE = /<{2,}[\s_.-]*ORCH[\s_.-]*ISSUE[\s_.-]*(?:BEGIN|END)[\s_.-]*>{2,}/gi;
 const MARKER_PLACEHOLDER = '[marker removed]';
+/** Characters that NFKC leaves alone but a reader takes for one of the delimiter's characters. */
+const LOOKALIKES: Record<string, string> = {
+  ...Object.fromEntries([...'\u2039\u2329\u27e8\u276e\u3008\u02c2'].map((c) => [c, '<'])),
+  ...Object.fromEntries([...'\u203a\u232a\u27e9\u276f\u3009\u02c3'].map((c) => [c, '>'])),
+  '\u00ab': '<<',
+  '\u00bb': '>>',
+  // Greek and Cyrillic letters that look like the Latin ones of ORCH ISSUE BEGIN END, and digits.
+  ...Object.fromEntries(
+    [...'\u039f\u03bf\u041e\u043e\u0555\u0585\u03f4\u0398\u03b8\u0030'].map((c) => [c, 'O']),
+  ),
+  ...Object.fromEntries([...'\u0421\u0441\u03f9\u03f2\u216d\u217d'].map((c) => [c, 'C'])),
+  ...Object.fromEntries([...'\u0397\u041d\u043d\u04a2'].map((c) => [c, 'H'])),
+  ...Object.fromEntries(
+    [...'\u0399\u03b9\u0406\u0456\u04c0\u04cf\u2160\u2170\u01c0\u0031\u006c\u007c'].map((c) => [
+      c,
+      'I',
+    ]),
+  ),
+  ...Object.fromEntries([...'\u0405\u0455'].map((c) => [c, 'S'])),
+  ...Object.fromEntries([...'\u0395\u0415\u0435\u03b5'].map((c) => [c, 'E'])),
+  ...Object.fromEntries([...'\u0392\u0412\u0432\u03b2'].map((c) => [c, 'B'])),
+  ...Object.fromEntries([...'\u039d\u03bd'].map((c) => [c, 'N'])),
+  ...Object.fromEntries([...'\u0420\u0440\u03a1\u03c1'].map((c) => [c, 'R'])),
+  ...Object.fromEntries([...'\u054d\u057d\u03c5'].map((c) => [c, 'U'])),
+  ...Object.fromEntries([...'\u0500\u0501\u216e\u217e'].map((c) => [c, 'D'])),
+  ...Object.fromEntries([...'\u050c\u050d\u0262'].map((c) => [c, 'G'])),
+};
+const FORMAT_CHARS = /\p{Cf}/gu;
+
+/** One character as a reader sees it: NFKC, format characters (zero-width...) dropped, lookalikes. */
+function foldChar(ch: string): string {
+  let out = '';
+  for (const c of ch.normalize('NFKC').replace(FORMAT_CHARS, '')) out += LOOKALIKES[c] ?? c;
+  return out;
+}
 
 /**
- * Neutralizes the delimiters in a value that comes from outside orch (issue, server).
- * The placeholder shares no character with the delimiters except letters inside brackets,
- * so a single pass cannot reassemble a new delimiter from the surrounding text.
+ * Neutralizes the delimiters in a value that comes from outside orch (issue, server). The search
+ * runs on a folded copy (NFKC, no format characters, common Greek and Cyrillic lookalikes, best
+ * effort, not exhaustive); each match is replaced in the ORIGINAL text, over the characters it
+ * came from. The placeholder starts and ends with brackets, which the pattern never matches, so a
+ * replacement cannot combine with its neighbours into a new delimiter.
  */
 export function neutralizeMarkers(value: string): string {
-  return value.replace(MARKER_RE, MARKER_PLACEHOLDER);
+  let folded = '';
+  // For each UTF-16 unit of `folded`: where its source character starts and ends in `value`.
+  const from: number[] = [];
+  const to: number[] = [];
+  let i = 0;
+  for (const ch of value) {
+    const f = foldChar(ch);
+    for (let k = 0; k < f.length; k++) {
+      from.push(i);
+      to.push(i + ch.length);
+    }
+    folded += f;
+    i += ch.length;
+  }
+  let out = '';
+  let last = 0;
+  for (const m of folded.matchAll(MARKER_RE)) {
+    const start = from[m.index] as number;
+    const end = to[m.index + m[0].length - 1] as number;
+    if (start < last) continue;
+    out += value.slice(last, start) + MARKER_PLACEHOLDER;
+    last = end;
+  }
+  return last === 0 ? value : out + value.slice(last);
 }
 
 export function buildManualPrompt(task: TaskOfferPayload['task'], branch: string): string {

@@ -15,7 +15,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Security
 
-- The task prompt neutralizes the `<<<ORCH_ISSUE_BEGIN>>>` and `<<<ORCH_ISSUE_END>>>` delimiters (any case or spacing) in every field that comes from outside the agent: title, body, each acceptance criterion, repository name and branch. Before, only the body was cleaned, so a title containing the closing delimiter could end the issue block and add text that read as orch's own instructions. A truncated issue keeps its closing delimiter.
+- The task prompt neutralizes the `<<<ORCH_ISSUE_BEGIN>>>` and `<<<ORCH_ISSUE_END>>>` delimiters in every field that comes from outside the agent: title, body, each acceptance criterion, repository name and branch. Before, only the body was cleaned, so a title containing the closing delimiter could end the issue block and add text that read as orch's own instructions. Lookalikes are caught too, on a normalized copy of the text (NFKC, zero-width and other format characters removed): any case, spaces, dashes or dots between the words, two chevrons instead of three, full-width characters and common Greek and Cyrillic letters (best effort, not every lookalike). A truncated issue keeps its closing delimiter.
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
 
 ## 0.9.1 - 2026-11-04
