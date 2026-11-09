@@ -176,7 +176,15 @@ const ConfigSchema = z.object({
    */
   RETENTION_AUDIT_DAYS: z.preprocess(
     emptyToUndefined,
-    z.coerce.number().int().nonnegative().default(365),
+    z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(365)
+      .refine((n) => n === 0 || n >= 30, {
+        message:
+          'must be 0 (keep forever) or at least 30 days: the audit log is never purged sooner',
+      }),
   ),
   RETENTION_WEBHOOK_DAYS: z.preprocess(
     emptyToUndefined,

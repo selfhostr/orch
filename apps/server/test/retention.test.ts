@@ -1,9 +1,12 @@
 /** Retention purge: each table is purged past its duration and not before, 0 disables it. */
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../src/config';
 import { Metrics } from '../src/observability';
 import { runRetention } from '../src/retention';
 import { prisma, uid, uniqueInt } from './harness';
+
+// Bulk inserts and purges on a busy database: more than the default 5 s.
+vi.setConfig({ testTimeout: 30_000 });
 
 const DAY = 86_400_000;
 const ago = (days: number) => new Date(Date.now() - days * DAY);
@@ -199,6 +202,9 @@ describe('retention purge', () => {
 
   it('the config rejects negative durations and reads empty values as the default', () => {
     expect(() => cfg({ RETENTION_AUDIT_DAYS: '-1' })).toThrow();
+    expect(() => cfg({ RETENTION_AUDIT_DAYS: '29' })).toThrow(/at least 30/);
+    expect(cfg({ RETENTION_AUDIT_DAYS: '30' }).RETENTION_AUDIT_DAYS).toBe(30);
+    expect(cfg({ RETENTION_AUDIT_DAYS: '0' }).RETENTION_AUDIT_DAYS).toBe(0);
     expect(cfg({ RETENTION_AUDIT_DAYS: '' }).RETENTION_AUDIT_DAYS).toBe(365);
     expect(cfg().RETENTION_WEBHOOK_DAYS).toBe(30);
     expect(cfg().RETENTION_ASSIGNMENT_DAYS).toBe(90);
@@ -240,6 +246,37 @@ describe('retention purge', () => {
     await expect(
       prisma.$executeRaw`DELETE FROM "AuditLog" WHERE id = ${recent.id}`,
     ).rejects.toThrow(/append-only/);
+  });
+
+  it('a forged cutoff cannot delete audit rows younger than 30 days', async () => {
+    const tag = uid();
+    const rows = await prisma.auditLog.createManyAndReturn({
+      data: [
+        { actorType: 'SYSTEM', action: `ret.${tag}.now` },
+        { actorType: 'SYSTEM', action: `ret.${tag}.10d`, at: ago(10) },
+        { actorType: 'SYSTEM', action: `ret.${tag}.29d`, at: ago(29) },
+        { actorType: 'SYSTEM', action: `ret.${tag}.40d`, at: ago(40) },
+      ],
+    });
+    const ids = rows.map((r) => r.id);
+    // The attack: any session can set the setting, then delete directly.
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('orch.audit_purge_before', '2100-01-01', true)`;
+        await tx.$executeRaw`DELETE FROM "AuditLog" WHERE id = ANY(${ids}::bigint[])`;
+      }),
+    ).rejects.toThrow(/append-only/);
+    const left = await prisma.auditLog.findMany({ where: { id: { in: ids } } });
+    expect(left.map((r) => r.action).sort()).toEqual(
+      [`ret.${tag}.10d`, `ret.${tag}.29d`, `ret.${tag}.40d`, `ret.${tag}.now`].sort(),
+    );
+    // Rows past the floor can be removed by the purge function, never the younger ones.
+    await prisma.$executeRaw`SELECT audit_log_purge(30, 1000)`;
+    const after = await prisma.auditLog.findMany({ where: { id: { in: ids } } });
+    expect(after.map((r) => r.action).sort()).toEqual(
+      [`ret.${tag}.10d`, `ret.${tag}.29d`, `ret.${tag}.now`].sort(),
+    );
+    await expect(prisma.$queryRaw`SELECT audit_log_purge(29, 10)`).rejects.toThrow();
   });
 
   it('two concurrent passes purge in batches without getting in each other s way', async () => {

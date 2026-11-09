@@ -26,6 +26,9 @@ export type RetentionResult = Partial<Record<RetentionTable, number>>;
 interface Rule {
   table: Exclude<RetentionTable, 'AuditLog'>;
   days: (c: Config) => number;
+  /** Primary key and indexed date column the batch is selected by. */
+  key: string;
+  dateColumn: string;
   /** SQL condition; `cutoff` is the SQL expression of the oldest instant kept. */
   where: (cutoff: Prisma.Sql) => Prisma.Sql;
 }
@@ -33,22 +36,30 @@ interface Rule {
 const RULES: Rule[] = [
   {
     table: 'WebhookDelivery',
+    key: 'deliveryId',
+    dateColumn: 'receivedAt',
     days: (c) => c.RETENTION_WEBHOOK_DAYS,
     where: (cutoff) => Prisma.sql`"receivedAt" < ${cutoff}`,
   },
   {
     table: 'Assignment',
+    key: 'id',
+    dateColumn: 'updatedAt',
     days: (c) => c.RETENTION_ASSIGNMENT_DAYS,
     where: (cutoff) => Prisma.sql`"status" IN ('REJECTED', 'EXPIRED', 'CANCELLED')
       AND "startedAt" IS NULL AND "cleanupPending" = false AND "updatedAt" < ${cutoff}`,
   },
   {
     table: 'Session',
+    key: 'id',
+    dateColumn: 'expiresAt',
     days: (c) => c.RETENTION_EXPIRED_DAYS,
     where: (cutoff) => Prisma.sql`"expiresAt" < ${cutoff}`,
   },
   {
     table: 'EnrollmentToken',
+    key: 'id',
+    dateColumn: 'expiresAt',
     days: (c) => c.RETENTION_EXPIRED_DAYS,
     where: (cutoff) => Prisma.sql`"expiresAt" < ${cutoff}`,
   },
@@ -92,13 +103,16 @@ export async function runRetention(
     const days = rule.days(config);
     if (days <= 0) continue;
     const table = Prisma.raw(`"${rule.table}"`);
+    const key = Prisma.raw(`"${rule.key}"`);
+    const date = Prisma.raw(`"${rule.dateColumn}"`);
     await run(
       rule.table,
       () =>
-        // SKIP LOCKED: a row another pass is deleting is left to it.
-        prisma.$executeRaw`DELETE FROM ${table} WHERE ctid IN (
-        SELECT ctid FROM ${table} WHERE ${rule.where(ago(days))}
-        LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED)`,
+        // Batch picked on the indexed date column, deleted by primary key. SKIP LOCKED: a row
+        // another pass is deleting is left to it.
+        prisma.$executeRaw`DELETE FROM ${table} WHERE ${key} IN (
+        SELECT ${key} FROM ${table} WHERE ${rule.where(ago(days))}
+        ORDER BY ${date} LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED)`,
     );
   }
   return result;
