@@ -36,6 +36,35 @@ export function mapGithubRoleName(name: string | null | undefined): GithubRole {
   return (name && ROLES[name]) || 'NONE';
 }
 
+/**
+ * Role from a collaborator permission answer. A custom organization role has a `role_name`
+ * orch does not know: fall back to the rights GitHub reports (`user.permissions`), then to the
+ * legacy `permission` (admin, write, read, none).
+ */
+export function roleFromPermission(data: {
+  role_name?: string | null;
+  permission?: string | null;
+  user?: {
+    permissions?: {
+      admin?: boolean;
+      maintain?: boolean;
+      push?: boolean;
+      triage?: boolean;
+      pull?: boolean;
+    } | null;
+  } | null;
+}): GithubRole {
+  const named = mapGithubRoleName(data.role_name);
+  if (named !== 'NONE') return named;
+  const p = data.user?.permissions;
+  if (p?.admin) return 'ADMIN';
+  if (p?.maintain) return 'MAINTAIN';
+  if (p?.push) return 'WRITE';
+  if (p?.triage) return 'TRIAGE';
+  if (p?.pull) return 'READ';
+  return mapGithubRoleName(data.permission);
+}
+
 function splitFullName(fullName: string): { owner: string; repo: string } {
   const [owner, repo] = fullName.split('/');
   if (!owner || !repo) throw new Error(`Invalid repository name: ${fullName}`);
@@ -171,7 +200,7 @@ export class OctokitGithubClient implements GithubClient {
       const { data } = await this.forInstallation(
         installationId,
       ).rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: login });
-      return mapGithubRoleName(data.role_name);
+      return roleFromPermission(data);
     } catch (err) {
       if ((err as { status?: number }).status === 404) return 'NONE';
       throw err;

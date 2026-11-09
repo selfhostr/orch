@@ -159,18 +159,24 @@ export interface RepoAccessObserver {
 interface RepoAccessSettings {
   ttlMs: number;
   graceMs: number;
+  /** After a failed refresh, GitHub is not asked again for that pair for this long. */
+  retryMs: number;
   observer?: RepoAccessObserver;
 }
 
 interface RepoAccessState extends RepoAccessSettings {
   /** Refreshes in flight, per (project, user): concurrent checks share one GitHub call. */
   inflight: Map<string, Promise<GithubRole>>;
+  /** Last failed refresh (GitHub unreachable), per (project, user). */
+  failedAt: Map<string, number>;
 }
 
 const newState = (): RepoAccessState => ({
   ttlMs: ROLE_CACHE_TTL_MS,
   graceMs: DEFAULT_GRACE_MS,
+  retryMs: 30_000,
   inflight: new Map(),
+  failedAt: new Map(),
 });
 /** One state per app, keyed by its GitHub client (no client: no refresh, only the TTL matters). */
 const states = new WeakMap<GithubClient, RepoAccessState>();
@@ -269,7 +275,9 @@ function isRateLimited(err: unknown): boolean {
  *     younger than `graceMs`, otherwise denied (nothing is cached: the next check asks again);
  *   - webhooks mark rows stale (`invalidateRepoAccess`), which also ends the grace for them, and
  *     a refresh started before an invalidation never overwrites it (compare-and-set on syncedAt).
- * Public repositories keep the legacy behaviour (an unreachable GitHub keeps the cached role).
+ * Public repositories follow the same rules: running their tasks needs write access, so an
+ * unreachable GitHub gets the same grace, then denies. After a failed refresh, GitHub is not asked
+ * again for that pair for `retryMs` (the dispatcher ticks every few seconds).
  */
 export async function getRoleInfo(
   prisma: PrismaClient,
@@ -307,6 +315,10 @@ async function lookupRole(
   if (cached && age < state.ttlMs) return info(cached.githubRole);
   if (!github) return info(cached?.githubRole ?? 'NONE');
   const key = pairKey(project.id, user.id);
+  const failed = state.failedAt.get(key);
+  if (failed !== undefined && Date.now() - failed < state.retryMs) {
+    return info(outageRole(state, cached, age));
+  }
   let refresh = state.inflight.get(key);
   if (!refresh) {
     refresh = refreshRole(prisma, github, state, project, user, cached, age);
@@ -317,6 +329,15 @@ async function lookupRole(
     refresh.then(done, done);
   }
   return info(await refresh);
+}
+
+/** GitHub cannot answer: the last verified role while younger than the grace, else NONE. */
+function outageRole(
+  state: RepoAccessState,
+  cached: ProjectPermission | null,
+  age: number,
+): GithubRole {
+  return cached && age < state.graceMs ? cached.githubRole : 'NONE';
 }
 
 async function refreshRole(
@@ -352,13 +373,14 @@ async function refreshRole(
       user.login,
     );
   } catch (err) {
-    if (!project.isPrivate) return cached?.githubRole ?? 'NONE';
     const status = statusOf(err);
     if (status === 404 || (status === 403 && !isRateLimited(err))) {
+      state.failedAt.delete(pairKey(project.id, user.id));
       state.observer?.count('denied');
       await store('NONE');
       return 'NONE';
     }
+    state.failedAt.set(pairKey(project.id, user.id), Date.now());
     if (cached && age < state.graceMs) {
       state.observer?.count('grace');
       state.observer?.warn(
@@ -374,6 +396,7 @@ async function refreshRole(
     );
     return 'NONE';
   }
+  state.failedAt.delete(pairKey(project.id, user.id));
   state.observer?.count('refreshed');
   await store(role);
   return role;

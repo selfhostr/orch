@@ -48,6 +48,8 @@ export default {
   why: {
     summary: "Why isn't this running?",
     noParticipant: 'No active participant.',
+    noWriter:
+      'No participant has write access to this repository on GitHub. Tasks only run for members with Write, Maintain or Admin access.',
     eligible: 'eligible',
   },
   logs: {

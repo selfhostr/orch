@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapGithubRoleName } from '../github';
+import { mapGithubRoleName, roleFromPermission } from '../github';
 import { canParticipate, canSee, canSubmit, toOrchRole } from './roles';
 
 describe('role mapping', () => {
@@ -17,6 +17,25 @@ describe('role mapping', () => {
     expect(mapGithubRoleName('maintain')).toBe('MAINTAIN');
     expect(mapGithubRoleName('custom-role')).toBe('NONE');
     expect(mapGithubRoleName(undefined)).toBe('NONE');
+  });
+
+  it('a custom organization role falls back to the rights GitHub reports', () => {
+    const custom = (permissions: Record<string, boolean>, permission = 'read') =>
+      roleFromPermission({ role_name: 'release-manager', permission, user: { permissions } });
+    expect(custom({ admin: false, maintain: false, push: true, triage: true, pull: true })).toBe(
+      'WRITE',
+    );
+    expect(custom({ maintain: true, push: true, pull: true })).toBe('MAINTAIN');
+    expect(custom({ admin: true, push: true, pull: true }, 'admin')).toBe('ADMIN');
+    expect(custom({ triage: true, pull: true })).toBe('TRIAGE');
+    expect(custom({ pull: true })).toBe('READ');
+    // No user.permissions: the legacy `permission` field.
+    expect(roleFromPermission({ role_name: 'custom', permission: 'write' })).toBe('WRITE');
+    expect(roleFromPermission({ role_name: 'custom', permission: 'none' })).toBe('NONE');
+    // A known role name wins.
+    expect(roleFromPermission({ role_name: 'triage', user: { permissions: { push: true } } })).toBe(
+      'TRIAGE',
+    );
   });
 
   it('derives rights from policy, role and overrides', () => {

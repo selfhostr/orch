@@ -655,12 +655,28 @@ export class Dispatcher {
     if (task.status === 'TODO' && pending > 0) {
       taskReasons.push(block('pending_offer', 'Offered: waiting for an answer'));
     }
-    const members =
-      task.status === 'TODO'
-        ? await this.evaluateMembers(task, await this.snapshot([task], now), now)
-        : [];
+    const snap = task.status === 'TODO' ? await this.snapshot([task], now) : null;
+    const members = snap ? await this.evaluateMembers(task, snap, now) : [];
     if (task.status === 'TODO' && members.length === 0) {
       taskReasons.push(block('no_member', 'Nobody participates in this project yet'));
+    }
+    // Tasks only run for members with write access: say so when no participant has it.
+    if (snap && members.length > 0) {
+      let writer = false;
+      for (const p of snap.participantsOf(task.projectId)) {
+        if (await this.repoAllowed(snap, task, p.user)) {
+          writer = true;
+          break;
+        }
+      }
+      if (!writer) {
+        taskReasons.push(
+          block(
+            'no_writer',
+            'No participant has write access to this repository on GitHub: tasks only run for members with Write, Maintain or Admin',
+          ),
+        );
+      }
     }
     return {
       taskId,
