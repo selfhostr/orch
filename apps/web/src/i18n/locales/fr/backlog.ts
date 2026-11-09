@@ -54,7 +54,7 @@ export default {
   cancel: {
     label: 'Annuler la tâche',
     title: 'Annuler la tâche #{number} ?',
-    body: "{title} quittera le tableau et ne sera pas exécutée. L’issue GitHub reste ouverte.",
+    body: '{title} quittera le tableau et ne sera pas exécutée. L’issue GitHub reste ouverte.',
     keep: 'Garder la tâche',
     confirm: 'Annuler la tâche',
   },
