@@ -6,11 +6,13 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Added
 
+- `backup/restore.sh --verify` restores a dump (plain or age-encrypted) into a throwaway Postgres of the same major version, checks it (no `pg_restore` error, `_prisma_migrations` present, table and row counts) and removes everything it created, without touching the running server or database. See "Verify a backup" in the backup documentation.
 - A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm run check:licences`).
 - The README states that the agent image installs Claude Code, which is proprietary software from Anthropic, and that orch itself is MIT.
 
 ### Changed
 
+- `backup/restore.sh` checks that the dump is readable (`pg_restore --list`) before stopping the server, mounts the backups volume read-only, and always restarts the server, with a message about the state it leaves, when the restore fails or the script is interrupted.
 - The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.
 
 ### Security
