@@ -1,3 +1,4 @@
+import { ApiError } from '../api/client.ts';
 import { t } from '../i18n/index.ts';
 
 /**
@@ -64,6 +65,40 @@ export async function subscribeBrowser(publicKey: string): Promise<PushSubscript
     if (!stale) throw err;
     await stale.unsubscribe();
     return reg.pushManager.subscribe(options);
+  }
+}
+
+export interface PushKeys {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}
+
+function keysOf(sub: PushSubscription): PushKeys {
+  const json = sub.toJSON();
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
+    throw new Error(t('notifications.push.incompleteSubscription'));
+  }
+  return { endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } };
+}
+
+/**
+ * Subscribes this browser and registers it on the server with `register`. The server keeps an
+ * endpoint with the member who registered it: when it answers 409 `push_endpoint_taken` (the
+ * previous member of this browser was signed out without switching notifications off, e.g. an
+ * expired session), the browser drops that subscription, subscribes again to get a new endpoint
+ * and retries once.
+ */
+export async function enableBrowserPush(
+  publicKey: string,
+  register: (body: PushKeys) => Promise<unknown>,
+): Promise<void> {
+  const sub = await subscribeBrowser(publicKey);
+  try {
+    await register(keysOf(sub));
+  } catch (err) {
+    if (!(err instanceof ApiError && err.code === 'push_endpoint_taken')) throw err;
+    await sub.unsubscribe();
+    await register(keysOf(await subscribeBrowser(publicKey)));
   }
 }
 

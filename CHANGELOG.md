@@ -15,7 +15,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Security
 
-- A Web Push endpoint already registered by another member is refused (`409 push_endpoint_taken`) instead of being moved to the caller, so nobody can take over another member's browser notifications by replaying its endpoint.
+- A Web Push endpoint already registered by another member is refused (`409 push_endpoint_taken`) instead of being moved to the caller, so nobody can take over another member's browser notifications by replaying its endpoint. When that happens on a shared browser (the previous member was signed out without switching notifications off), the web app subscribes the browser again with a new endpoint and retries once.
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
 
 ## 0.9.1 - 2026-11-04
