@@ -11,7 +11,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Changed
 
-- Dependabot is the only dependency update tool: `renovate.json` is removed (Renovate never opened a pull request here).
+- Dependabot is the only dependency update tool: the second, unused update configuration is removed.
 - The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.
 
 ### Security
