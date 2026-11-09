@@ -480,7 +480,12 @@ describe('authorization code flow with PKCE', () => {
     await prisma.oAuthClient.create({
       data: { clientIdHash: sha256Hex(clientId), name: 'Claude Code', redirectUris: [evil] },
     });
-    for (const over of [{}, { response_type: 'x' }, { code_challenge_method: 'plain' }]) {
+    const overrides: Record<string, string>[] = [
+      {},
+      { response_type: 'x' },
+      { code_challenge_method: 'plain' },
+    ];
+    for (const over of overrides) {
       const q = authorizeQuery(clientId, pkce().challenge, { redirect_uri: evil, ...over });
       for (const cookie of [user.cookie, undefined]) {
         const r = await app.inject({
