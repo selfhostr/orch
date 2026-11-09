@@ -13,7 +13,6 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 - Removing a member or a project, denying an access request, revoking an invite link and rotating the notification signing secret now ask for confirmation in the same dialog as revoking a machine or a token. Browser `confirm()` popups are gone.
 - An error with no translation now shows the server's error code: in English after the message, in French after the status (`Request failed (418): teapot`).
-
 - The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.
 
 ### Fixed
