@@ -12,7 +12,7 @@ import {
 import { requireUser, type AuthDeps } from '../auth';
 import type { Dispatcher } from '../dispatch/dispatcher';
 import { HttpError, parseBody } from '../http/errors';
-import { TaskService } from './service';
+import { TaskService, cancelTask } from './service';
 
 export { TaskService } from './service';
 
@@ -95,6 +95,15 @@ export function registerTasks(
     const retried = await svc.retry(t, user, access, 'web', req.ip);
     deps.dispatcher?.kick();
     return svc.view(retried, access, user);
+  });
+
+  app.post('/api/tasks/:id/cancel', async (req): Promise<{ ok: true }> => {
+    const user = requireUser(req);
+    const { id } = req.params as { id: string };
+    const [t, access] = await svc.getVisible(id, user);
+    await cancelTask(deps.prisma, t, user, access, req.ip);
+    await deps.dispatcher?.withdrawForTask(t.id, 'cancelled');
+    return { ok: true };
   });
 
   app.get('/api/tasks/:id/why-not-running', async (req): Promise<WhyNotRunningResponse> => {

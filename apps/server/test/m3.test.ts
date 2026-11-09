@@ -327,6 +327,39 @@ describe('backlog REST', () => {
   });
 });
 
+describe('cancel', () => {
+  it('owner and creator cancel a task that has not started; others and started tasks are refused', async () => {
+    const { owner, member, project } = await world();
+    const a = await createTask(owner, project.id, { title: 'A' });
+    expect(
+      TaskViewSchema.parse((await api(app, owner)('GET', `/api/tasks/${a.id}`)).json()),
+    ).toMatchObject({
+      canCancel: true,
+    });
+    const asMember = TaskViewSchema.parse(
+      (await api(app, member)('GET', `/api/tasks/${a.id}`)).json(),
+    );
+    expect(asMember.canCancel).toBe(false);
+    expect((await api(app, member)('POST', `/api/tasks/${a.id}/cancel`)).statusCode).toBe(403);
+
+    const res = await api(app, owner)('POST', `/api/tasks/${a.id}/cancel`);
+    expect(res.statusCode, res.body).toBe(200);
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: a.id } })).status).toBe('CANCELLED');
+    expect(await prisma.auditLog.count({ where: { taskId: a.id, action: 'task.cancelled' } })).toBe(
+      1,
+    );
+    // already cancelled
+    expect((await api(app, owner)('POST', `/api/tasks/${a.id}/cancel`)).statusCode).toBe(409);
+
+    const b = await createTask(owner, project.id, { title: 'B' });
+    await prisma.task.update({ where: { id: b.id }, data: { status: 'IN_PROGRESS' } });
+    expect((await api(app, owner)('POST', `/api/tasks/${b.id}/cancel`)).statusCode).toBe(409);
+    expect(
+      TaskViewSchema.parse((await api(app, owner)('GET', `/api/tasks/${b.id}`)).json()).canCancel,
+    ).toBe(false);
+  });
+});
+
 describe('claim', () => {
   it('claims atomically: the winner gets IN_PROGRESS and an offer', async () => {
     const { owner, project, repo, agent, member } = await world();

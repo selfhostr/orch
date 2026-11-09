@@ -18,6 +18,7 @@ export default {
       'This agent still uses the old image (ghcr.io/theroxat). Switch it to ghcr.io/selfhostr once by hand: see Updating agents in the docs.',
     no_agent_online: 'Your machine is offline: start your agent first.',
     not_participating: 'You no longer participate in this project.',
+    not_cancellable: 'This task has already started and cannot be cancelled.',
     not_retryable: 'This task cannot be retried.',
     offer_closed: 'This request is no longer available: it was taken, withdrawn or has expired.',
     paused: 'Your agent is paused: resume it in My Server first.',

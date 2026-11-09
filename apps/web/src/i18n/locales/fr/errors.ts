@@ -20,6 +20,7 @@ export default {
       'Cet agent utilise encore l’ancienne image (ghcr.io/theroxat). Passez-le une fois à la main sur ghcr.io/selfhostr : voir « Updating agents » dans la documentation.',
     no_agent_online: 'La machine est hors ligne : démarrer d’abord l’agent.',
     not_participating: 'Tu ne participes plus à ce projet.',
+    not_cancellable: 'Cette tâche a déjà démarré et ne peut plus être annulée.',
     not_retryable: 'Cette tâche ne peut pas être relancée.',
     offer_closed: 'Cette demande n’est plus disponible : elle a été prise, retirée ou a expiré.',
     paused: 'L’agent est en pause : le reprendre d’abord dans Mon serveur.',

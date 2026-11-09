@@ -74,6 +74,7 @@ export function TaskCard({
   onApprove,
   retrying = false,
   onRetry,
+  onCancel,
   highlighted = false,
 }: {
   task: TaskView;
@@ -82,6 +83,8 @@ export function TaskCard({
   onApprove: (id: string) => void;
   retrying?: boolean;
   onRetry?: (id: string) => void;
+  /** Opens the confirmation; shown only when the server says the caller may cancel. */
+  onCancel?: (task: TaskView) => void;
   /** Targeted by `/backlog?task=<id>`: scrolled into view, focused and outlined. */
   highlighted?: boolean;
 }) {
@@ -179,6 +182,15 @@ export function TaskCard({
           onClick={() => onRetry(task.id)}
         >
           {t('backlog.card.retry')}
+        </button>
+      )}
+      {task.canCancel && onCancel && (
+        <button
+          className="danger"
+          aria-label={t('backlog.card.cancelLabel', { number: String(task.issueNumber) })}
+          onClick={() => onCancel(task)}
+        >
+          {t('backlog.card.cancel')}
         </button>
       )}
       {(task.status === 'TODO' || task.status === 'BLOCKED') && <WhyNotRunning taskId={task.id} />}

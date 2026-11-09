@@ -137,6 +137,7 @@ export function toTaskView(
       (EDITABLE as readonly string[]).includes(t.status) &&
       (access.isOwner || t.createdById === viewer.id),
     canApprove: t.status === 'PROPOSED' && (access.isOwner || access.canSubmit),
+    canCancel: canCancelTask(t, access, viewer),
     dispatch: {
       mode: DISPATCH_VIEW[t.dispatchMode],
       memberIds: t.targets.map((x) => x.userId),
@@ -1715,4 +1716,47 @@ function buildPrBody(
     `Head: ${p.headSha.slice(0, 12)}, ${p.changedFiles} changed file(s).`,
   );
   return lines.join('\n');
+}
+
+/** Statuses a task can be cancelled from: not started yet (same rule as closing its issue). */
+const CANCELLABLE: TaskStatus[] = ['PROPOSED', 'TODO'];
+
+/** The project owner and the task creator may cancel a task that has not started. */
+export function canCancelTask(t: TaskRow, access: Access, user: Pick<User, 'id'>): boolean {
+  return (
+    (CANCELLABLE as readonly string[]).includes(t.status) &&
+    (access.isOwner || t.createdById === user.id)
+  );
+}
+
+/** Cancels a task that has not started (web "Cancel"). Pending offers are withdrawn by the caller. */
+export async function cancelTask(
+  prisma: PrismaClient,
+  t: TaskRow,
+  user: User,
+  access: Access,
+  ip?: string,
+): Promise<void> {
+  if (!(access.isOwner || t.createdById === user.id)) {
+    throw new HttpError(403, 'forbidden', 'Only the creator or the project owner can cancel');
+  }
+  const res = await prisma.task.updateMany({
+    where: { id: t.id, status: { in: CANCELLABLE } },
+    data: { status: 'CANCELLED' },
+  });
+  if (res.count !== 1) {
+    throw new HttpError(
+      409,
+      'not_cancellable',
+      'Only a task that has not started can be cancelled',
+    );
+  }
+  await audit(prisma, {
+    actorUserId: user.id,
+    action: 'task.cancelled',
+    projectId: t.projectId,
+    taskId: t.id,
+    ip,
+    data: { via: 'web' },
+  });
 }

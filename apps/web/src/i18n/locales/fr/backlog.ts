@@ -14,6 +14,7 @@ export default {
       other: '{count} tickets importés (déjà importés : {already}).',
     },
     approved: '#{number} approuvée et déplacée dans À faire',
+    cancelled: '#{number} annulée',
     notOnBoard:
       'Cette tâche n’est pas sur le tableau (elle appartient peut-être à un projet inaccessible).',
     nothingHere: 'Rien ici',
@@ -44,9 +45,18 @@ export default {
     needsAttentionReason: 'Attention requise : {reason}',
     retry: 'Relancer',
     retryLabel: 'Relancer #{number}',
+    cancel: 'Annuler',
+    cancelLabel: 'Annuler #{number}',
     approve: 'Approuver',
     approveLabel: 'Approuver #{number}',
     takeIt: 'La prendre : <code>orch take {number}</code>',
+  },
+  cancel: {
+    label: 'Annuler la tâche',
+    title: 'Annuler la tâche #{number} ?',
+    body: "{title} quittera le tableau et ne sera pas exécutée. L'issue GitHub reste ouverte.",
+    keep: 'Garder la tâche',
+    confirm: 'Annuler la tâche',
   },
   why: {
     summary: 'Pourquoi ne démarre-t-elle pas ?',

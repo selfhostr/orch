@@ -329,6 +329,46 @@ describe('Backlog', () => {
     );
   });
 
+  it('cancels a task after a confirmation, only where canCancel is set', async () => {
+    let cancelled = false;
+    const calls = mockApi(
+      base({
+        'GET /tasks': () => ({
+          json: board({
+            TODO: cancelled
+              ? [task({ id: 't9', issueNumber: 9, title: 'Other' })]
+              : [
+                  task({ canCancel: true }),
+                  task({ id: 't9', issueNumber: 9, title: 'Other', canCancel: false }),
+                ],
+          }),
+        }),
+        'POST /tasks/t1/cancel': () => {
+          cancelled = true;
+          return { json: { ok: true } };
+        },
+      }),
+    );
+    renderApp('/backlog');
+    const card = await screen.findByRole('article', { name: 'Task #1' });
+    expect(screen.getAllByRole('button', { name: /^Cancel #/ })).toHaveLength(1);
+    fireEvent.click(within(card).getByRole('button', { name: 'Cancel #1' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Cancel task' });
+    expect(within(dialog).getByText(/First task will leave the board/)).toBeTruthy();
+    // Keeping the task sends nothing.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep task' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(calls.some((c) => c.path === '/tasks/t1/cancel')).toBe(false);
+    fireEvent.click(within(card).getByRole('button', { name: 'Cancel #1' }));
+    const again = await screen.findByRole('dialog', { name: 'Cancel task' });
+    fireEvent.click(within(again).getByRole('button', { name: 'Cancel task' }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === 'POST' && c.path === '/tasks/t1/cancel')).toBe(true),
+    );
+    await waitFor(() => expect(screen.queryByRole('article', { name: 'Task #1' })).toBeNull());
+    expect(screen.getByText('#1 cancelled')).toBeTruthy();
+  });
+
   it('lazily loads why-not-running when the disclosure opens', async () => {
     const calls = mockApi(
       base({
