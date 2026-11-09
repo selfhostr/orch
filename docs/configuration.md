@@ -66,6 +66,20 @@ Generate the pair once with `npx web-push generate-vapid-keys`.
 
 The usual setup is to list yourself in `ORCH_ADMIN_GITHUB_LOGINS` and let people in from the web UI (see "Managing access" in {doc}`installation`). A user may sign in if they are an admin, **or** their login is listed, **or** they are an active member of a listed organization, **or** an admin approved them on the Access page.
 
+**Listed logins are bound to a GitHub account.** GitHub lets anyone take a login that its owner renamed away from, so orch does not trust a login alone. The first time someone signs in with a login listed in `ORCH_ADMIN_GITHUB_LOGINS` or `ORCH_ALLOWED_GITHUB_LOGINS`, orch records their numeric GitHub account id for that login. From then on the account id decides:
+
+- the right follows the account: an admin who renames their GitHub account stays admin (and signs in) under the new login;
+- another account that later signs in with the listed login gets nothing from the list: it is refused like any unknown login (and is never admin, even with `ORCH_ALLOW_ANY_GITHUB_USER=true`);
+- approvals and refusals made on the Access page follow the account id too: a declined or removed user who renames their account is still refused.
+
+Setting up a new server does not change: list your login, sign in, and your account is bound on that first sign-in. On an existing installation, at startup, each listed login that is not bound yet is bound to the user who already signed in with it, so current admins stay admins after the update. Removing a login from the variable (then restarting) removes the right; the binding is kept and applies again if the login is listed again. To bind a listed login to another account (for example after you recreated your GitHub account), delete its row and restart the server:
+
+```sh
+docker compose exec postgres psql -U orch -d orch \
+  -c "DELETE FROM \"EnvLoginBinding\" WHERE \"githubLogin\" = 'your-login'"
+docker compose restart server
+```
+
 Org membership is checked at login with the user's own GitHub token, and again for open sessions every `ORCH_ALLOWLIST_CACHE_SEC` seconds (default 300). Removing someone from the list or the org therefore takes effect within minutes (logins are re-checked on every request). Org checks need the GitHub App organization permission **Members: Read-only** ({doc}`github-app`) and the App installed on, or approved by, the organization. In development and tests an empty allowlist only logs a warning.
 
 (rate-limits)=

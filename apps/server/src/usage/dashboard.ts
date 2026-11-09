@@ -319,7 +319,7 @@ export function registerUsage(
     const { range } = parseBody(UsageRangeQuerySchema, req.query);
     return computeUsageDashboard(
       deps.prisma,
-      { id: user.id, login: user.login, isAdmin: app.allowlist.isAdmin(user.login) },
+      { id: user.id, login: user.login, isAdmin: await app.allowlist.isAdmin(user) },
       range,
       deps.config.BUDGET_SAFETY_RESERVE,
       new Date(),

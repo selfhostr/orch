@@ -189,7 +189,8 @@ describe('admins', () => {
     const me = await as(a, admin)('GET', '/api/me');
     expect(me.statusCode).toBe(200);
     expect(me.json()).toMatchObject({ githubLogin: ADMIN, isAdmin: true });
-    // Case-insensitive.
+    // Case-insensitive (same GitHub account).
+    ids.set(ADMIN.toUpperCase(), ids.get(ADMIN)!);
     expect((await signIn(a, ADMIN.toUpperCase())).status).toBe(302);
   });
 
@@ -660,16 +661,127 @@ describe('precedence', () => {
     await as(a, admin)('POST', '/api/admin/access/grants', { githubLogin: login });
     const first = await signIn(a, login);
     expect(first.status).toBe(302);
-    // The first owner renamed their account; someone else takes the login (allowed by the env).
+    // The first owner renamed their account; someone else takes the login: neither the env
+    // login nor the grant (both bound to the first account) lets them in.
     await prisma.user.update({
       where: { githubId: BigInt(first.githubId) },
       data: { login: `old-${uid()}` },
     });
     ids.set(login, uniqueInt());
     const second = await signIn(a, login);
-    expect(second.status).toBe(302);
+    expect(second.status).toBe(403);
     const g = await prisma.accessGrant.findUniqueOrThrow({ where: { githubLogin: login } });
     expect(g.githubUserId).toBe(BigInt(first.githubId));
+  });
+});
+
+describe('env logins and decisions follow the GitHub account id', () => {
+  /** The account renames itself on GitHub and signs in again under the new login. */
+  async function rename(a: FastifyInstance, from: string): Promise<{ to: string; s: Signed }> {
+    const to = `renamed-${uid()}`;
+    ids.set(to, ids.get(from)!);
+    return { to, s: await signIn(a, to) };
+  }
+
+  it('first sign-in of a listed admin binds the login; a later owner of the name is not admin', async () => {
+    const root = `boss-${uid()}`;
+    const a = newApp({ ORCH_ADMIN_GITHUB_LOGINS: root });
+    const first = await signIn(a, root);
+    expect(first.status).toBe(302);
+    expect((await as(a, first.cookie)('GET', '/api/me')).json()).toMatchObject({ isAdmin: true });
+    const b = await prisma.envLoginBinding.findUniqueOrThrow({
+      where: { kind_githubLogin: { kind: 'ADMIN', githubLogin: root } },
+    });
+    expect(b.githubUserId).toBe(BigInt(first.githubId));
+
+    // The admin renames their account: still admin under the new login.
+    const { s: renamed } = await rename(a, root);
+    expect(renamed.status).toBe(302);
+    const me = (await as(a, renamed.cookie)('GET', '/api/me')).json<{ isAdmin: boolean }>();
+    expect(me.isAdmin).toBe(true);
+    expect((await as(a, renamed.cookie)('GET', '/api/admin/access')).statusCode).toBe(200);
+
+    // Someone else takes the freed login: not admin, not even allowed in.
+    ids.set(root, uniqueInt());
+    const squatter = await signIn(a, root);
+    expect(squatter.status).toBe(403);
+    expect(squatter.cookie).toBeUndefined();
+    // On a server where anyone may sign in, they get in but are still not admin.
+    const open = newApp({ ORCH_ADMIN_GITHUB_LOGINS: root, ORCH_ALLOW_ANY_GITHUB_USER: 'true' });
+    const s = await signIn(open, root);
+    expect(s.status).toBe(302);
+    expect((await as(open, s.cookie)('GET', '/api/me')).json()).toMatchObject({ isAdmin: false });
+    expect((await as(open, s.cookie)('GET', '/api/admin/access')).statusCode).toBe(403);
+  });
+
+  it('a listed login (ORCH_ALLOWED_GITHUB_LOGINS) is bound the same way', async () => {
+    const listed = `env-${uid()}`;
+    const a = newApp({ ORCH_ALLOWED_GITHUB_LOGINS: listed });
+    expect((await signIn(a, listed)).status).toBe(302);
+    const { s: renamed } = await rename(a, listed);
+    expect(renamed.status).toBe(302);
+    ids.set(listed, uniqueInt());
+    expect((await signIn(a, listed)).status).toBe(403);
+  });
+
+  it('a decline follows the account when it renames itself', async () => {
+    const a = newApp();
+    const admin = await adminCookie(a);
+    const login = `nope-${uid()}`;
+    const refused = await signIn(a, login);
+    expect((await requestAccess(a, tokenOf(refused.body)!)).statusCode).toBe(200);
+    const g = await prisma.accessGrant.findUniqueOrThrow({ where: { githubLogin: login } });
+    await as(a, admin)('POST', `/api/admin/access/grants/${g.id}/deny`);
+
+    const { to, s } = await rename(a, login);
+    expect(s.status).toBe(403);
+    expect(s.body).toContain('Your request was declined');
+    expect(tokenOf(s.body)).toBeUndefined();
+    // Even in open mode, and the request form refuses a token signed for the new login.
+    const open = newApp({ ORCH_ALLOW_ANY_GITHUB_USER: 'true' });
+    expect((await signIn(open, to)).status).toBe(403);
+    const token = signToken(
+      KEY,
+      'access-request',
+      {
+        login: to,
+        id: String(ids.get(to)),
+        avatarUrl: null,
+      },
+      60_000,
+    );
+    expect((await requestAccess(a, token)).statusCode).toBe(403);
+  });
+
+  it('a decline made by login only is bound to the account it refuses', async () => {
+    const a = newApp({ ORCH_ALLOW_ANY_GITHUB_USER: 'true' });
+    const admin = await adminCookie(a);
+    const login = `byname-${uid()}`;
+    const r = await as(a, admin)('POST', '/api/admin/access/grants', { githubLogin: login });
+    await as(a, admin)(
+      'POST',
+      `/api/admin/access/grants/${r.json<{ grant: GrantJson }>().grant.id}/deny`,
+    );
+    expect((await signIn(a, login)).status).toBe(403);
+    const { s } = await rename(a, login);
+    expect(s.status).toBe(403);
+  });
+
+  it('an existing installation keeps its admins: users already signed in are bound at startup', async () => {
+    const root = `legacy-${uid()}`;
+    const githubId = BigInt(uniqueInt());
+    await prisma.user.create({ data: { githubId, login: root } });
+    const a = newApp({ ORCH_ADMIN_GITHUB_LOGINS: root.toUpperCase() });
+    await a.ready();
+    const b = await prisma.envLoginBinding.findUniqueOrThrow({
+      where: { kind_githubLogin: { kind: 'ADMIN', githubLogin: root } },
+    });
+    expect(b.githubUserId).toBe(githubId);
+    // That admin signs in normally; another account under that login does not.
+    ids.set(root, Number(githubId));
+    const s = await signIn(a, root);
+    expect(s.status).toBe(302);
+    expect((await as(a, s.cookie)('GET', '/api/me')).json()).toMatchObject({ isAdmin: true });
   });
 });
 

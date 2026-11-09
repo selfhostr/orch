@@ -15,6 +15,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Security
 
+- Admins (`ORCH_ADMIN_GITHUB_LOGINS`) and listed logins (`ORCH_ALLOWED_GITHUB_LOGINS`) are bound to the GitHub account id of their first sign-in. A login that its owner renamed away from and that someone else took over no longer gives admin rights or access, and access decisions (approve, deny, remove) follow a renamed account. Existing installations bind each listed login to the user who already signed in with it at startup, so current admins stay admins. See "Who may sign in" in the configuration docs.
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
 
 ## 0.9.1 - 2026-11-04

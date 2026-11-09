@@ -215,8 +215,18 @@ export async function planNotifications(
       const login = str(data.login) ?? 'someone';
       const admins = config.ORCH_ADMIN_GITHUB_LOGINS;
       if (admins.length === 0) return [];
+      // A listed login bound to an account (see EnvLoginBinding) reaches that account only.
+      const bound = await prisma.envLoginBinding.findMany({
+        where: { kind: 'ADMIN', githubLogin: { in: admins } },
+      });
+      const boundLogins = new Set(bound.map((b) => b.githubLogin));
       const users = await prisma.user.findMany({
-        where: { login: { in: admins, mode: 'insensitive' } },
+        where: {
+          OR: [
+            { githubId: { in: bound.map((b) => b.githubUserId) } },
+            { login: { in: admins.filter((l) => !boundLogins.has(l)), mode: 'insensitive' } },
+          ],
+        },
         select: { id: true },
       });
       return [

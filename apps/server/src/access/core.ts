@@ -49,6 +49,31 @@ export function grantView(g: AccessGrant): GrantView {
   };
 }
 
+/**
+ * The access grants that apply to a GitHub account: those bound to its id (whatever its login is
+ * now) and an unbound one for its current login. A grant bound to another account id is ignored
+ * (the login was renamed and reused). DENIED wins, then APPROVED, then PENDING.
+ */
+export async function findGrant(
+  prisma: PrismaClient,
+  login: string,
+  githubId: bigint,
+): Promise<AccessGrant | null> {
+  const githubLogin = login.toLowerCase();
+  const rows = await prisma.accessGrant.findMany({
+    where: { OR: [{ githubLogin }, { githubUserId: githubId }] },
+    orderBy: { updatedAt: 'desc' },
+  });
+  const mine = rows.filter((g) =>
+    g.githubUserId === null ? g.githubLogin === githubLogin : g.githubUserId === githubId,
+  );
+  for (const status of ['DENIED', 'APPROVED', 'PENDING'] as const) {
+    const g = mine.find((x) => x.status === status);
+    if (g) return g;
+  }
+  return null;
+}
+
 export function inviteIsActive(i: AccessInvite, now = Date.now()): boolean {
   return !i.revokedAt && i.expiresAt.getTime() > now && (i.multiUse || i.uses === 0);
 }
