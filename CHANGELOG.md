@@ -13,6 +13,10 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 - The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.
 
+### Fixed
+
+- With several server instances, an offer relayed to the instance holding the agent's socket that gets no answer within 5 s is no longer taken as "agent offline". A task taken with `take_task` stays claimed instead of going back to TODO while the machine may already run it: the machine's first progress report confirms it, and a `hello` without it or 10 minutes without any report gives it back. An automatic offer stays open until the agent answers or it expires.
+
 ### Security
 
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.

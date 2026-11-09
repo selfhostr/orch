@@ -50,10 +50,22 @@ interface Conn {
 /** How long an offer relayed to the instance holding the agent's socket may take. */
 const OFFER_RELAY_TIMEOUT_MS = 5_000;
 
+/**
+ * A manual claim whose relayed offer got no answer: how long it may wait for the agent's first
+ * progress report before it goes back to the pool (see the dispatcher's leases).
+ */
+export const CLAIM_UNCONFIRMED_MS = 10 * 60_000;
+
 /** A duplicate seen this recently without a stored ack is still being processed (no answer). */
 const DUPLICATE_IN_FLIGHT_MS = 5 * 60_000;
 
-export type OfferRefusal = 'offline' | 'paused' | 'revoked' | 'no_consent' | 'access_suspended';
+/**
+ * `unconfirmed`: relayed to the instance holding the socket, without an answer. The agent may have
+ * received it: the caller keeps the offer or claim as it is and lets the agent's next message
+ * (accept, progress, `hello`) or the offer's expiry decide.
+ */
+export type OfferRefusal =
+  'offline' | 'paused' | 'revoked' | 'no_consent' | 'access_suspended' | 'unconfirmed';
 
 export class OfferRefusedError extends Error {
   constructor(readonly reason: OfferRefusal) {
@@ -520,8 +532,8 @@ export class AgentGateway {
       }
       return;
     }
-    // On another instance: it sends, and says whether its socket took the offer. No answer counts
-    // as offline (the caller undoes the claim or closes the offer, as for a socket that closed).
+    // On another instance: it sends, and says whether its socket took the offer. `false` is
+    // offline. No answer (timeout, lost reply) is not: the offer may have reached the agent.
     const r = this.remote(agentId);
     if (!r) throw new OfferRefusedError('offline');
     const delivered = await this.deps
@@ -531,7 +543,8 @@ export class AgentGateway {
         { agentId, payload },
         OFFER_RELAY_TIMEOUT_MS,
       )
-      .catch(() => false);
+      .catch(() => null);
+    if (delivered === null) throw new OfferRefusedError('unconfirmed');
     if (!delivered) throw new OfferRefusedError('offline');
   }
 
@@ -539,7 +552,9 @@ export class AgentGateway {
    * M5 `take_task`: the member claims a task for one of their online, unpaused machines through
    * the same claim path as `orch take` (manual mode), then the server tells that agent to start
    * it with `task.offer` kind CLAIM, `initiatedBy: "server"`. If the offer cannot be delivered the
-   * claim is undone (task back to TODO).
+   * claim is undone (task back to TODO). A relayed offer without an answer keeps the claim, with a
+   * lease: the agent's first progress report confirms it, a `hello` without it or the lease's end
+   * gives the task back (see the dispatcher).
    */
   async claimForUser(
     userId: string,
@@ -601,6 +616,26 @@ export class AgentGateway {
       await this.sendOffer(best.id, offer);
     } catch (err) {
       if (!(err instanceof OfferRefusedError)) throw err;
+      if (err.reason === 'unconfirmed') {
+        await prisma.assignment.updateMany({
+          where: { id: offer.assignmentId, status: 'ACCEPTED', startedAt: null },
+          data: { leaseExpiresAt: new Date(Date.now() + CLAIM_UNCONFIRMED_MS) },
+        });
+        await audit(prisma, {
+          actorUserId: userId,
+          agentId: best.id,
+          action: 'task.claim_unconfirmed',
+          projectId: offer.task.project.id,
+          taskId: offer.task.taskId,
+          data: { assignmentId: offer.assignmentId, via: 'mcp' },
+        });
+        return {
+          ok: true,
+          assignmentId: offer.assignmentId,
+          agentId: best.id,
+          machineName: best.name,
+        };
+      }
       await prisma.$transaction([
         prisma.assignment.updateMany({
           where: { id: offer.assignmentId, status: 'ACCEPTED' },

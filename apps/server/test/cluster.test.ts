@@ -19,6 +19,7 @@ import {
 } from '@orch/shared';
 import pg from 'pg';
 import { encrypt } from '../src/auth/crypto';
+import { CLAIM_UNCONFIRMED_MS } from '../src/agents/gateway';
 import { channelOf, lockClassOf } from '../src/cluster';
 import { SharedCounter, SharedRateLimiter } from '../src/http/shared-limit';
 import { LiveLogStore } from '../src/logs/store';
@@ -586,6 +587,133 @@ describe('two instances: hardening', () => {
     const after = await prisma.notificationJob.findUnique({ where: { id: row.id } });
     expect(after).toMatchObject({ status: 'SENDING', attempts: 2, instanceId: 'the-other-worker' });
     await prisma.notificationJob.delete({ where: { id: row.id } });
+  });
+});
+
+describe('two instances: a relayed claim without an answer', () => {
+  const C3 = `r${uid()}`.slice(0, 40);
+  let e: FastifyInstance;
+  let f: FastifyInstance;
+  let owner: TestUser;
+  let member: TestUser;
+  let projectId: string;
+  let agent: Awaited<ReturnType<typeof onlineAgent>>;
+
+  beforeAll(async () => {
+    e = instance('e', C3);
+    await e.listen({ port: 0, host: '127.0.0.1' });
+    f = instance('f', C3);
+    await f.listen({ port: 0, host: '127.0.0.1' });
+    await until(() => e.cluster.hasPeers() && f.cluster.hasPeers());
+    owner = await loginAs(e, gh);
+    const repo = repoFor();
+    gh.repos.set(owner.token, [repo]);
+    projectId = ProjectViewSchema.parse(
+      (await api(e, owner)('POST', '/api/projects', { githubRepoId: repo.githubRepoId })).json(),
+    ).id;
+    member = await loginAs(e, gh);
+    await prisma.participation.create({
+      data: {
+        userId: member.userId,
+        projectId,
+        active: true,
+        approvedAt: new Date(),
+        percent: 50,
+        mode: 'APPROVAL',
+      },
+    });
+    // The socket is on F: E relays the offer.
+    agent = await onlineAgent(member, e, f);
+    await until(() => e.agentGateway.isConnected(agent.agentId));
+  });
+  afterAll(async () => {
+    await e?.close();
+    await f?.close();
+  });
+
+  async function newTask() {
+    const res = await api(e, owner)('POST', `/api/projects/${projectId}/tasks`, {
+      title: 'Take me',
+      body: 'By hand.',
+      size: 'S',
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return TaskViewSchema.parse(res.json());
+  }
+
+  /** E's next relay request gets no answer; `deliver`: F still sends the offer to the agent. */
+  function noAnswer(deliver: boolean) {
+    const bus = e.cluster.bus;
+    const real = bus.request.bind(bus);
+    vi.spyOn(bus, 'request').mockImplementationOnce(async (to, kind, data, ms) => {
+      if (deliver) await real(to, kind, data, ms);
+      throw new Error(`no answer from ${to} to ${kind}`);
+    });
+  }
+
+  const take = (t: TaskView) =>
+    e.agentGateway.claimForUser(member.userId, {
+      projectFullName: t.projectFullName,
+      issueNumber: t.issueNumber,
+    });
+  const lapse = (now: Date) =>
+    (e.dispatcher as unknown as { expireLeases(now: Date): Promise<void> }).expireLeases(now);
+  const later = () => new Date(Date.now() + CLAIM_UNCONFIRMED_MS + 60_000);
+
+  it('keeps the claim and lets the agent confirm it with its first report', async () => {
+    const t = await newTask();
+    noAnswer(true);
+    const r = await take(t);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const row = await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } });
+    expect(row.status).toBe('ACCEPTED');
+    expect(row.leaseExpiresAt).not.toBeNull();
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status).toBe(
+      'IN_PROGRESS',
+    );
+    await agent.client.next('task.offer', (m) => m.payload.assignmentId === r.assignmentId);
+    // The late answer: the agent starts the run.
+    const ack = await agent.client.call(
+      agentMessage('task.status', { assignmentId: r.assignmentId, seq: 1, state: 'preparing' }),
+    );
+    expect(ack.ok).toBe(true);
+    await lapse(later());
+    const after = await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } });
+    expect(after.status).toBe('RUNNING');
+    await prisma.assignment.update({ where: { id: r.assignmentId }, data: { status: 'FAILED' } });
+  });
+
+  it('gives the task back when the agent says hello without it', async () => {
+    const t = await newTask();
+    noAnswer(false);
+    const r = await take(t);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    await reconnect(agent.credential, f);
+    await until(
+      async () =>
+        (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status ===
+        'LOST',
+    );
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status).toBe('TODO');
+  });
+
+  it('gives the task back when the bounded wait ends without any report', async () => {
+    const t = await newTask();
+    noAnswer(false);
+    const r = await take(t);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    await lapse(new Date());
+    expect(
+      (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status,
+    ).toBe('ACCEPTED');
+    await lapse(later());
+    expect(
+      (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status,
+    ).toBe('LOST');
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status).toBe('TODO');
   });
 });
 

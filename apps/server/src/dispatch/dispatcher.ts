@@ -831,15 +831,18 @@ export class Dispatcher {
         await this.gateway.sendOffer(c.agentId, this.offerPayload(task, a, 'AUTO_OFFER'));
       } catch (err) {
         if (!(err instanceof OfferRefusedError)) throw err;
-        this.deps.metrics?.offersRefused.inc({ reason: `undeliverable_${err.reason}` });
-        const closed = await this.closePending(
-          [a],
-          'CANCELLED',
-          `undeliverable:${err.reason}`,
-          now,
-        );
-        if (closed.length > 0) snap.releaseOffer(a);
-        return;
+        // Unconfirmed: maybe received. The agent's accept or reject, or the expiry, closes it.
+        if (err.reason !== 'unconfirmed') {
+          this.deps.metrics?.offersRefused.inc({ reason: `undeliverable_${err.reason}` });
+          const closed = await this.closePending(
+            [a],
+            'CANCELLED',
+            `undeliverable:${err.reason}`,
+            now,
+          );
+          if (closed.length > 0) snap.releaseOffer(a);
+          return;
+        }
       }
     } else {
       this.gateway.sendToUser(
@@ -1053,7 +1056,13 @@ export class Dispatcher {
 
   private async expireLeases(now: Date): Promise<void> {
     const lapsed = await this.prisma.assignment.findMany({
-      where: { status: { in: [...HOLDS_SLOT] }, leaseExpiresAt: { lte: now } },
+      where: {
+        status: { in: [...HOLDS_SLOT] },
+        leaseExpiresAt: { lte: now },
+        // A manual claim's lease only bounds the wait for an unconfirmed offer (see the gateway's
+        // claimForUser): once the agent reported progress, a manual run has no time limit.
+        NOT: { kind: 'CLAIM', startedAt: { not: null } },
+      },
     });
     for (const a of lapsed) await this.lose(a, 'timeout', now);
     const cutoff = new Date(now.getTime() - this.deps.config.AGENT_LEASE_SEC * 1000);
@@ -1285,8 +1294,9 @@ export class Dispatcher {
       );
     } catch (err) {
       if (!(err instanceof OfferRefusedError)) throw err;
-      // Offline: re-sent on the next hello. Paused or no consent any more: back to the pool.
-      if (err.reason !== 'offline') {
+      // Offline or unconfirmed: re-sent on the next hello. Paused or no consent any more: back to
+      // the pool.
+      if (err.reason !== 'offline' && err.reason !== 'unconfirmed') {
         await this.reject(
           a.id,
           { userId: a.userId, agentId: a.agentId, via: 'agent' },
@@ -1403,6 +1413,20 @@ export class Dispatcher {
         );
       }
     }
+    // A manual claim whose relayed offer got no answer, absent from what the agent runs: it never
+    // arrived. Back to the pool.
+    const unconfirmed = await prisma.assignment.findMany({
+      where: {
+        agentId,
+        kind: 'CLAIM',
+        status: 'ACCEPTED',
+        startedAt: null,
+        leaseExpiresAt: { not: null },
+      },
+    });
+    for (const a of unconfirmed) {
+      if (!known.has(a.id)) await this.lose(a, 'undelivered', now);
+    }
     const resend = await prisma.assignment.findMany({
       where: {
         agentId,
@@ -1423,7 +1447,7 @@ export class Dispatcher {
         );
       } catch (err) {
         if (!(err instanceof OfferRefusedError)) throw err;
-        if (a.status === 'PENDING')
+        if (a.status === 'PENDING' && err.reason !== 'unconfirmed')
           await this.closePending([a], 'CANCELLED', `undeliverable:${err.reason}`, now);
       }
     }
