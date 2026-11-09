@@ -15,6 +15,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Security
 
+- MCP OAuth: a client's https `redirect_uri` must be on a host listed in the new `ORCH_OAUTH_REDIRECT_HOSTS` (exact match, default `claude.ai,claude.com`); loopback http (`127.0.0.1`, `[::1]`, `localhost`, any port) is still accepted. Before, any https address was, so a client registered as "Claude Code" could send an approved code to any site. The rule applies at registration and again at every authorization and token request, so clients registered earlier with another https host are refused (register again from Claude Code, or add the host to the list). An invalid authorization request is no longer redirected to an address that is not allowed (open redirect), and the consent page states where the browser and code will go.
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
 
 ## 0.9.1 - 2026-11-04

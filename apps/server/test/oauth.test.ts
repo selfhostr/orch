@@ -226,20 +226,28 @@ describe('dynamic client registration', () => {
     expect(a).not.toBeNull();
   });
 
-  it('accepts loopback http on any port and https; rejects the rest', async () => {
+  it('accepts loopback http on any port and https on a listed host only; rejects the rest', async () => {
     for (const uri of [
       'http://localhost:1/cb',
       'http://127.0.0.1:65000/x',
       'http://[::1]:8080/cb',
-      'https://app.example.org/cb',
+      'https://claude.ai/api/mcp/auth_callback',
+      'https://claude.com/api/mcp/auth_callback',
+      'https://CLAUDE.AI:443/api/mcp/auth_callback',
     ]) {
       expect((await register(app, { redirect_uris: [uri] })).statusCode).toBe(201);
     }
     for (const uri of [
       'http://example.org/cb',
+      'http://claude.ai/api/mcp/auth_callback',
+      'https://app.example.org/cb',
+      'https://evil.claude.ai/cb',
+      'https://claude.ai.evil.example/cb',
+      'https://evilclaude.ai/cb',
+      'https://claude.ai:8443/cb',
       'myapp://cb',
       'javascript:alert(1)',
-      'https://a.example.org/cb#frag',
+      'https://claude.ai/cb#frag',
       'not a url',
     ]) {
       const r = await register(app, { redirect_uris: [uri] });
@@ -251,6 +259,28 @@ describe('dynamic client registration', () => {
     expect(secret.json()).toMatchObject({ error: 'invalid_client_metadata' });
     const implicit = await register(app, { response_types: ['token'] });
     expect(implicit.json()).toMatchObject({ error: 'invalid_client_metadata' });
+  });
+
+  it('a fake "Claude Code" with an unlisted https redirect is refused; a listed host works', async () => {
+    const fake = await register(app, {
+      client_name: 'Claude Code',
+      redirect_uris: ['https://attacker.example/cb'],
+    });
+    expect(fake.statusCode).toBe(400);
+    expect(fake.json()).toMatchObject({ error: 'invalid_redirect_uri' });
+    // One bad URI among good ones fails the whole registration.
+    const mixed = await register(app, { redirect_uris: [REDIRECT, 'https://attacker.example/cb'] });
+    expect(mixed.statusCode).toBe(400);
+    const custom = makeApp(gh, { env: { ORCH_OAUTH_REDIRECT_HOSTS: 'app.example.org' } });
+    expect(
+      (await register(custom, { redirect_uris: ['https://app.example.org/cb'] })).statusCode,
+    ).toBe(201);
+    expect(
+      (await register(custom, { redirect_uris: ['https://claude.ai/api/mcp/auth_callback'] }))
+        .statusCode,
+    ).toBe(400);
+    expect((await register(custom, { redirect_uris: [REDIRECT] })).statusCode).toBe(201);
+    await custom.close();
   });
 
   it('rate limits /register and /token per client IP', async () => {
@@ -440,6 +470,88 @@ describe('authorization code flow with PKCE', () => {
     expect(`${to.origin}${to.pathname}`).toBe(REDIRECT);
     expect(to.searchParams.get('error')).toBe('access_denied');
     expect(to.searchParams.get('state')).toBe('st-123');
+  });
+
+  it('never redirects an invalid request to a host that is not allowed', async () => {
+    const user = await loginAs(app, gh);
+    // A client stored before the rule (or whose host was removed from the list).
+    const clientId = `orch_cli_${randomBytes(16).toString('hex')}`;
+    const evil = 'https://attacker.example/cb';
+    await prisma.oAuthClient.create({
+      data: { clientIdHash: sha256Hex(clientId), name: 'Claude Code', redirectUris: [evil] },
+    });
+    for (const over of [{}, { response_type: 'x' }, { code_challenge_method: 'plain' }]) {
+      const q = authorizeQuery(clientId, pkce().challenge, { redirect_uri: evil, ...over });
+      for (const cookie of [user.cookie, undefined]) {
+        const r = await app.inject({
+          method: 'GET',
+          url: `/api/oauth/authorize?${q}`,
+          headers: cookie ? { cookie } : {},
+        });
+        expect(r.statusCode).toBe(400);
+        expect(r.headers.location).toBeUndefined();
+        expect(r.body).toContain('attacker.example');
+      }
+      const info = await app.inject({
+        method: 'GET',
+        url: `/api/oauth/consent?${q}`,
+        headers: { cookie: user.cookie },
+      });
+      expect(info.statusCode).toBe(400);
+      const post = await app.inject({
+        method: 'POST',
+        url: '/api/oauth/consent',
+        headers: { cookie: user.cookie, origin: BASE },
+        payload: { ...Object.fromEntries(q), approve: true },
+      });
+      expect(post.statusCode).toBe(400);
+      expect(post.body).not.toContain('redirectTo');
+    }
+    expect(await prisma.oAuthCode.count({ where: { userId: user.userId } })).toBe(0);
+    // Without redirect_uri (single registered URI) it is refused the same way.
+    const bare = authorizeQuery(clientId, pkce().challenge);
+    bare.delete('redirect_uri');
+    const r = await app.inject({ method: 'GET', url: `/api/oauth/authorize?${bare}` });
+    expect(r.statusCode).toBe(400);
+    expect(r.headers.location).toBeUndefined();
+  });
+
+  it('an invalid parameter with an allowed loopback redirect goes back with error=', async () => {
+    const clientId = await newClient();
+    const q = authorizeQuery(clientId, pkce().challenge, { response_type: 'x' });
+    const r = await app.inject({ method: 'GET', url: `/api/oauth/authorize?${q}` });
+    expect(r.statusCode).toBe(302);
+    const to = new URL(r.headers.location as string);
+    expect(`${to.origin}${to.pathname}`).toBe(REDIRECT);
+    expect(to.searchParams.get('error')).toBe('unsupported_response_type');
+  });
+
+  it('a client whose host is no longer listed is refused at authorize and at the token endpoint', async () => {
+    const listed = makeApp(gh, { env: { ORCH_OAUTH_REDIRECT_HOSTS: 'app.example.org' } });
+    const user = await loginAs(listed, gh);
+    const uri = 'https://app.example.org/cb';
+    const reg = await register(listed, { redirect_uris: [uri] });
+    expect(reg.statusCode).toBe(201);
+    const clientId = reg.json<{ client_id: string }>().client_id;
+    const p = pkce();
+    const to = await consent(user, clientId, p.challenge, true, { redirect_uri: uri }, listed);
+    const code = to.searchParams.get('code')!;
+    expect(code).toBeTruthy();
+    await listed.close();
+    // The same database, served with the default list (app.example.org not in it).
+    const q = authorizeQuery(clientId, pkce().challenge, { redirect_uri: uri, response_type: 'x' });
+    const r = await app.inject({ method: 'GET', url: `/api/oauth/authorize?${q}` });
+    expect(r.statusCode).toBe(400);
+    expect(r.headers.location).toBeUndefined();
+    const res = await token({
+      grant_type: 'authorization_code',
+      client_id: clientId,
+      code,
+      code_verifier: p.verifier,
+      redirect_uri: uri,
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ error: 'invalid_client' });
   });
 
   it('rejects redirect_uri mismatches without redirecting', async () => {

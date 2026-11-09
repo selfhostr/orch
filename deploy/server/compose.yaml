@@ -57,6 +57,8 @@ services:
       ORCH_PUBLIC_URL: ${ORCH_PUBLIC_URL:-}
       # Peers allowed to set X-Forwarded-*: the Caddy container (private Docker network) only.
       ORCH_TRUST_PROXY: ${ORCH_TRUST_PROXY:-loopback,linklocal,uniquelocal}
+      # https hosts MCP OAuth clients may redirect to (loopback http is always allowed).
+      ORCH_OAUTH_REDIRECT_HOSTS: ${ORCH_OAUTH_REDIRECT_HOSTS:-claude.ai,claude.com}
       # Rate limits: empty means "use the server default" (the server treats '' as unset).
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-}
       RATE_LIMIT_WINDOW_SEC: ${RATE_LIMIT_WINDOW_SEC:-}

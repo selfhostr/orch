@@ -59,6 +59,22 @@ describe('public URL and proxy trust', () => {
       '10.0.0.0/8',
     );
   });
+
+  it('ORCH_OAUTH_REDIRECT_HOSTS defaults to the Claude web hosts and rejects anything but hosts', () => {
+    const claude = ['claude.ai', 'claude.com'];
+    expect(loadConfig(base).ORCH_OAUTH_REDIRECT_HOSTS).toEqual(claude);
+    const empty = loadConfig({ ...base, ORCH_OAUTH_REDIRECT_HOSTS: '' });
+    expect(empty.ORCH_OAUTH_REDIRECT_HOSTS).toEqual(claude);
+    expect(
+      loadConfig({ ...base, ORCH_OAUTH_REDIRECT_HOSTS: ' Claude.ai , app.example.org:8443 ' })
+        .ORCH_OAUTH_REDIRECT_HOSTS,
+    ).toEqual(['claude.ai', 'app.example.org:8443']);
+    for (const bad of ['https://claude.ai', '*.claude.ai', 'claude.ai/cb', '.claude.ai', 'a b']) {
+      expect(() => loadConfig({ ...base, ORCH_OAUTH_REDIRECT_HOSTS: bad })).toThrow(
+        /ORCH_OAUTH_REDIRECT_HOSTS/,
+      );
+    }
+  });
 });
 
 describe('agent update settings', () => {
