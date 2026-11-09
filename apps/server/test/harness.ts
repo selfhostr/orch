@@ -225,7 +225,8 @@ export async function giveRole(
   });
   const key = `${p.installation.githubInstallationId}:${p.fullName}:${login}`;
   if (gh.roles.has(key)) return;
-  gh.roles.set(key, role);
+  const owner = await prisma.user.findUnique({ where: { id: p.addedById } });
+  gh.roles.set(key, owner?.login === login ? 'ADMIN' : role);
   // A role looked up earlier (cached as NONE) is asked again.
   await prisma.projectPermission.updateMany({
     where: { projectId, user: { login } },
