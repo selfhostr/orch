@@ -1,16 +1,19 @@
 <div align="center">
 <a href="https://orch.selfhostr.io"><img src=".github/assets/banner.svg" alt="orch: A shared to-do list that turns into pull requests." width="100%"></a>
 
-**A shared to-do list for teams who trust each other, run on each member's own Claude subscription.**
+<h3>A shared to-do list for teams who trust each other, run on each member's own Claude subscription.</h3>
 
-[Site](https://orch.selfhostr.io) · [Docs](https://orch.selfhostr.io/docs/) · [Demo](https://orch.selfhostr.io/demo/) · [Changelog](CHANGELOG.md)
+[![CI](https://github.com/selfhostr/orch/actions/workflows/ci.yml/badge.svg)](https://github.com/selfhostr/orch/actions/workflows/ci.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/selfhostr/orch/badge)](https://scorecard.dev/viewer/?uri=github.com/selfhostr/orch) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[![CI](https://github.com/selfhostr/orch/actions/workflows/ci.yml/badge.svg)](https://github.com/selfhostr/orch/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 </div>
 
 ## Overview
 
-Tasks are GitHub issues. A member, or Claude Code through MCP, adds them to a shared pool. Each task then runs on a teammate's own machine, with their own Claude subscription, in a throwaway container that only sees its own git clone, and `orch` pushes a branch and opens a PR. Free, for good: MIT licence, no paid edition.
+- Tasks are GitHub issues. A member, or Claude Code through MCP, adds them to a shared pool.
+- Each task runs on a teammate's own machine, with their own Claude subscription, in a throwaway container that only sees its own git clone. `orch` pushes a branch and opens a PR.
+- Docs: [orch.selfhostr.io/docs](https://orch.selfhostr.io/docs/). Changes: [CHANGELOG.md](CHANGELOG.md).
+
+Free, for good. MIT licence, no paid edition.
 
 ## Quick start
 
@@ -63,6 +66,8 @@ Issues and pull requests are welcome: [CONTRIBUTING.md](CONTRIBUTING.md). Securi
 
 MIT, see [LICENSE](LICENSE). Provided "as is", without warranty of any kind.
 
-## Support
+## Support orch
 
-orch is free and has no company behind it. If it saves you time: [sponsor us on GitHub](https://github.com/sponsors/selfhostr).
+orch is free and has no company behind it. If it saves you time, you can support its development:
+
+[Sponsor us on GitHub](https://github.com/sponsors/selfhostr), recurring or one-off.
