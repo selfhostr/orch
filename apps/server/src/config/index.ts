@@ -169,6 +169,27 @@ const ConfigSchema = z.object({
   AGENT_HEARTBEAT_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
   AGENT_SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
   RETENTION_PURGE_INTERVAL_MS: z.coerce.number().int().positive().default(3_600_000),
+  /**
+   * Retention of the tables that only grow, in days; 0 keeps the table forever. Audit entries,
+   * GitHub webhook delivery ids, offers that never started (rejected, expired, cancelled), and
+   * sessions, enrollment tokens expired for that long are deleted by the maintenance leader.
+   */
+  RETENTION_AUDIT_DAYS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().nonnegative().default(365),
+  ),
+  RETENTION_WEBHOOK_DAYS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().nonnegative().default(30),
+  ),
+  RETENTION_ASSIGNMENT_DAYS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().nonnegative().default(90),
+  ),
+  RETENTION_EXPIRED_DAYS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().nonnegative().default(7),
+  ),
   // Several instances (docs/installation.md "Running several server instances").
   /** Unique name of this process among the instances sharing the database (default: hostname). */
   ORCH_INSTANCE_ID: z.preprocess(

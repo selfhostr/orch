@@ -39,6 +39,7 @@ Default process and Node.js metrics (`process_*`, `nodejs_*`) plus:
 | `orch_notification_deliveries_total`    | counter   | `channel`, `result`               | External notification attempts (`sent`, `retry`, `failed`) by channel                                                            |
 | `orch_cluster_leader`                   | gauge     | `lease`                           | 1 when this instance holds the `dispatcher` or `maintenance` leadership ({ref}`multi-instance`)                                  |
 | `orch_cluster_leader_changes_total`     | counter   | `lease`, `event`                  | Leadership `acquired`, `lost` or `released` by this instance                                                                     |
+| `orch_retention_purged_rows_total`      | counter   | `table`                           | Rows deleted by the retention purge, by table (`AuditLog`, `WebhookDelivery`, `Assignment`, `Session`, `EnrollmentToken`)        |
 | `orch_cluster_peers`                    | gauge     |                                   | Other live server instances this one knows of                                                                                    |
 | `orch_cluster_messages_total`           | counter   | `direction`, `kind`               | Messages between instances (`in`, `out`) by kind                                                                                 |
 
