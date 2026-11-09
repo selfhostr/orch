@@ -172,14 +172,17 @@ describe('subscribe / unsubscribe', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("refuses (409) an endpoint that belongs to another member and leaves it theirs", async () => {
+  it('refuses (409) an endpoint that belongs to another member and leaves it theirs', async () => {
     const a = await loginAs(app, gh);
     const b = await loginAs(app, gh);
     const ep = endpoint();
     await subscribe(a, ep);
     const res = await api(app, b)('POST', '/api/notifications/push/subscribe', {
       endpoint: ep,
-      keys: { p256dh: randomBytes(65).toString('base64url'), auth: randomBytes(16).toString('base64url') },
+      keys: {
+        p256dh: randomBytes(65).toString('base64url'),
+        auth: randomBytes(16).toString('base64url'),
+      },
     });
     expect(res.statusCode).toBe(409);
     expect(res.json()).toMatchObject({ error: { code: 'push_endpoint_taken' } });

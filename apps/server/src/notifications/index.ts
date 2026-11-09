@@ -333,7 +333,8 @@ export function registerNotifications(
       try {
         await prisma.pushSubscription.create({ data: { userId: user.id, endpoint, ...data } });
       } catch (err) {
-        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'))
+          throw err;
         const owner = await prisma.pushSubscription.findUnique({ where: { endpoint } });
         if (owner?.userId !== user.id) throw taken;
       }
