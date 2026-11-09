@@ -38,6 +38,7 @@ test('access admin: approve/deny/remove, pre-approve, invites, declined list; me
   newRole,
 }) => {
   const page = await newRole('olivia');
+  page.setDefaultTimeout(10_000);
   await page.goto('/admin/access');
   await settle(page);
   await expect(
