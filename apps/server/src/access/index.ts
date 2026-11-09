@@ -16,6 +16,7 @@ import {
   grantView,
   inviteIsActive,
   inviteView,
+  releaseGrantLogin,
 } from './core';
 import {
   NOTE_MAX,
@@ -88,6 +89,7 @@ export function registerAccess(app: FastifyInstance, deps: AuthDeps): void {
       const rawNote = typeof b.note === 'string' ? b.note.trim().slice(0, NOTE_MAX) : '';
       const note = rawNote || null;
 
+      if (githubUserId !== null) await releaseGrantLogin(prisma, githubLogin, githubUserId);
       const existing = await prisma.accessGrant.findUnique({ where: { githubLogin } });
       if (existing?.status === 'DENIED') return html(reply, 403, declinedPage(login, avatarUrl));
       // Declined under another login (renamed account): still declined.
@@ -174,6 +176,8 @@ export function registerAccess(app: FastifyInstance, deps: AuthDeps): void {
         orgs: config.ORCH_ALLOWED_GITHUB_ORGS,
         admins: config.ORCH_ADMIN_GITHUB_LOGINS,
         allowAny: config.ORCH_ALLOW_ANY_GITHUB_USER,
+        // Which GitHub account each listed login is bound to (first sign-in wins).
+        bindings: await app.allowlist.bindingsView(),
       },
     };
   });

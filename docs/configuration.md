@@ -72,13 +72,21 @@ The usual setup is to list yourself in `ORCH_ADMIN_GITHUB_LOGINS` and let people
 - another account that later signs in with the listed login gets nothing from the list: it is refused like any unknown login (and is never admin, even with `ORCH_ALLOW_ANY_GITHUB_USER=true`);
 - approvals and refusals made on the Access page follow the account id too: a declined or removed user who renames their account is still refused.
 
-Setting up a new server does not change: list your login, sign in, and your account is bound on that first sign-in. On an existing installation, at startup, each listed login that is not bound yet is bound to the user who already signed in with it, so current admins stay admins after the update. Removing a login from the variable (then restarting) removes the right; the binding is kept and applies again if the login is listed again. To bind a listed login to another account (for example after you recreated your GitHub account), delete its row and restart the server:
+**The first sign-in wins.** Whoever signs in first with a listed login gets the right for good, so list only logins that already exist on GitHub and that you control (check the spelling), and sign in with them right after you start or restart the server with a new entry. The binding is logged as a warning (`Listed GitHub login bound to the account that signed in with it`), written to the audit log (`access.env_login_bound`) and shown on the Access page next to each listed login ("GitHub account <id>" or "not bound yet").
+
+**Existing installations.** At startup, each listed login that is not bound yet is bound to the user who last signed in with it, but only after GitHub confirms (`GET /user/{id}`) that this account still has that login. If GitHub answers another login, or cannot be reached, nothing is bound and a warning is logged: the next sign-in with that login binds it. Current admins therefore stay admins after the update. An open session never binds a login by itself (the login stored in orch is only refreshed at sign-in).
+
+**Removing a login** from the variable (then restarting) removes the right at once; the binding is kept and applies again if the login is listed again.
+
+**Recovery: bind a listed login to another account** (for example after you deleted and recreated your GitHub account under the same login). Delete the binding, restart the server, then sign in with the new account right away:
 
 ```sh
 docker compose exec postgres psql -U orch -d orch \
   -c "DELETE FROM \"EnvLoginBinding\" WHERE \"githubLogin\" = 'your-login'"
 docker compose restart server
 ```
+
+At startup the old account is not bound again (GitHub no longer gives it that login), and the first sign-in binds the new one. The old account's user row gives up the login (it is renamed `former~<id>`), so the new account signs in normally.
 
 Org membership is checked at login with the user's own GitHub token, and again for open sessions every `ORCH_ALLOWLIST_CACHE_SEC` seconds (default 300). Removing someone from the list or the org therefore takes effect within minutes (logins are re-checked on every request). Org checks need the GitHub App organization permission **Members: Read-only** ({doc}`github-app`) and the App installed on, or approved by, the organization. In development and tests an empty allowlist only logs a warning.
 

@@ -670,8 +670,12 @@ describe('precedence', () => {
     ids.set(login, uniqueInt());
     const second = await signIn(a, login);
     expect(second.status).toBe(403);
-    const g = await prisma.accessGrant.findUniqueOrThrow({ where: { githubLogin: login } });
-    expect(g.githubUserId).toBe(BigInt(first.githubId));
+    // The first account keeps its grant (re-keyed so the new holder can ask for their own).
+    const g = await prisma.accessGrant.findFirstOrThrow({
+      where: { githubUserId: BigInt(first.githubId) },
+    });
+    expect(g).toMatchObject({ status: 'APPROVED', githubLogin: `${login}~${first.githubId}` });
+    expect(await prisma.accessGrant.findUnique({ where: { githubLogin: login } })).toBeNull();
   });
 });
 
@@ -771,6 +775,7 @@ describe('env logins and decisions follow the GitHub account id', () => {
     const root = `legacy-${uid()}`;
     const githubId = BigInt(uniqueInt());
     await prisma.user.create({ data: { githubId, login: root } });
+    gh.accounts.set(Number(githubId), root); // GitHub confirms the account still has the login
     const a = newApp({ ORCH_ADMIN_GITHUB_LOGINS: root.toUpperCase() });
     await a.ready();
     const b = await prisma.envLoginBinding.findUniqueOrThrow({
@@ -782,6 +787,117 @@ describe('env logins and decisions follow the GitHub account id', () => {
     const s = await signIn(a, root);
     expect(s.status).toBe(302);
     expect((await as(a, s.cookie)('GET', '/api/me')).json()).toMatchObject({ isAdmin: true });
+  });
+
+  const bindingOf = (kind: 'ADMIN' | 'ALLOWED', login: string) =>
+    prisma.envLoginBinding.findUnique({
+      where: { kind_githubLogin: { kind, githubLogin: login } },
+    });
+
+  it('a stale User row is not bound at startup; the real holder binds at sign-in, no 500', async () => {
+    const root = `stale-${uid()}`;
+    const oldId = uniqueInt();
+    // The old holder renamed their account on GitHub but never signed in again.
+    await prisma.user.create({ data: { githubId: BigInt(oldId), login: root } });
+    gh.accounts.set(oldId, `moved-${uid()}`);
+    const a = newApp({ ORCH_ADMIN_GITHUB_LOGINS: root });
+    await a.ready();
+    expect(await bindingOf('ADMIN', root)).toBeNull();
+
+    // GitHub down at startup: nothing bound either.
+    gh.failAccounts = true;
+    await newApp({ ORCH_ADMIN_GITHUB_LOGINS: root }).ready();
+    gh.failAccounts = false;
+    expect(await bindingOf('ADMIN', root)).toBeNull();
+
+    // The real holder signs in: bound to them.
+    const ownerId = uniqueInt();
+    ids.set(root, ownerId);
+    const s = await signIn(a, root);
+    expect(s.status).toBe(302);
+    expect((await bindingOf('ADMIN', root))?.githubUserId).toBe(BigInt(ownerId));
+    expect((await as(a, s.cookie)('GET', '/api/me')).json()).toMatchObject({ isAdmin: true });
+    // The stale row gave up the login (GitHub gives a login to one account at a time).
+    const old = await prisma.user.findUniqueOrThrow({ where: { githubId: BigInt(oldId) } });
+    expect(old.login).toBe(`former~${oldId}`);
+  });
+
+  it('a login removed from the variable gives nothing any more; listed again, the binding applies', async () => {
+    const root = `gone-${uid()}`;
+    const a = newApp({ ORCH_ADMIN_GITHUB_LOGINS: root });
+    const s = await signIn(a, root);
+    expect((await as(a, s.cookie)('GET', '/api/me')).json()).toMatchObject({ isAdmin: true });
+    const without = newApp({ ORCH_ALLOW_ANY_GITHUB_USER: 'true' });
+    const again = await signIn(without, root);
+    expect((await as(without, again.cookie)('GET', '/api/me')).json()).toMatchObject({
+      isAdmin: false,
+    });
+    expect((await as(without, again.cookie)('GET', '/api/admin/access')).statusCode).toBe(403);
+    const back = newApp({ ORCH_ADMIN_GITHUB_LOGINS: root });
+    expect((await as(back, again.cookie)('GET', '/api/me')).json()).toMatchObject({
+      isAdmin: true,
+    });
+  });
+
+  it('recovery after a recreated GitHub account: delete the binding, restart, sign in', async () => {
+    const root = `reborn-${uid()}`;
+    const a = newApp({ ORCH_ADMIN_GITHUB_LOGINS: root });
+    const first = await signIn(a, root);
+    expect(first.status).toBe(302);
+    // The account is deleted on GitHub; a new account takes the login.
+    gh.accounts.set(first.githubId, null);
+    ids.set(root, uniqueInt());
+    expect((await signIn(a, root)).status).toBe(403); // still bound to the deleted account
+    // Documented procedure: delete the row, restart, sign in with the new account.
+    await prisma.envLoginBinding.delete({
+      where: { kind_githubLogin: { kind: 'ADMIN', githubLogin: root } },
+    });
+    const restarted = newApp({ ORCH_ADMIN_GITHUB_LOGINS: root });
+    await restarted.ready();
+    expect(await bindingOf('ADMIN', root)).toBeNull(); // the old row is not re-bound
+    const s = await signIn(restarted, root);
+    expect(s.status).toBe(302);
+    expect((await as(restarted, s.cookie)('GET', '/api/me')).json()).toMatchObject({
+      isAdmin: true,
+    });
+    expect((await bindingOf('ADMIN', root))?.githubUserId).toBe(BigInt(s.githubId));
+  });
+
+  it("the new holder of a login is not stuck with the previous holder's grant", async () => {
+    const a = newApp();
+    const admin = await adminCookie(a);
+    const login = `handed-${uid()}`;
+    const refused = await signIn(a, login);
+    expect((await requestAccess(a, tokenOf(refused.body)!)).statusCode).toBe(200);
+    const g = await prisma.accessGrant.findUniqueOrThrow({ where: { githubLogin: login } });
+    await as(a, admin)('POST', `/api/admin/access/grants/${g.id}/deny`);
+    // The declined account renames itself; someone else takes the login and asks for access.
+    await rename(a, login);
+    ids.set(login, uniqueInt());
+    const next = await signIn(a, login);
+    expect(next.status).toBe(403);
+    expect(next.body).not.toContain('Your request was declined');
+    expect((await requestAccess(a, tokenOf(next.body)!)).statusCode).toBe(200);
+    const mine = await prisma.accessGrant.findUniqueOrThrow({ where: { githubLogin: login } });
+    expect(mine).toMatchObject({ status: 'PENDING', githubUserId: BigInt(next.githubId) });
+    // The previous decision is kept for the previous account.
+    const prev = await prisma.accessGrant.findUniqueOrThrow({ where: { id: g.id } });
+    expect(prev).toMatchObject({ status: 'DENIED', githubLogin: `${login}~${g.githubUserId}` });
+  });
+
+  it('the Access page shows which account each listed login is bound to', async () => {
+    const a = newApp({ ORCH_ALLOWED_GITHUB_LOGINS: `free-${uid()}` });
+    const admin = await adminCookie(a);
+    const res = await as(a, admin)('GET', '/api/admin/access');
+    const { bindings } = res.json<{
+      configured: { bindings: Array<{ kind: string; login: string; githubUserId: string }> };
+    }>().configured;
+    expect(bindings).toContainEqual({
+      kind: 'ADMIN',
+      login: ADMIN.toLowerCase(),
+      githubUserId: String(ids.get(ADMIN)),
+    });
+    expect(bindings.some((b) => b.kind === 'ALLOWED')).toBe(false);
   });
 });
 

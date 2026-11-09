@@ -60,6 +60,8 @@ export interface GithubClient {
   exchangeCode(code: string, redirectUri: string): Promise<GithubTokens>;
   refreshUserToken(refreshToken: string): Promise<GithubTokens>;
   getUser(accessToken: string): Promise<GithubUserInfo>;
+  /** Current login of a GitHub account id (`GET /user/{id}`), null when the account is gone. */
+  getLoginById(githubId: number): Promise<string | null>;
   /** Is the token's user an active member of the org? Needs the App's "Members: read" permission. */
   isOrgMember(accessToken: string, org: string): Promise<boolean>;
   /** Repos where the App is installed and the user has access (user-to-server token). */
