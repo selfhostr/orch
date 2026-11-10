@@ -48,10 +48,17 @@ const LOOKALIKES: Record<string, string> = {
  * underlines, variation selectors, the combining grapheme joiner). */
 const INVISIBLE = /[\p{Cf}\p{M}]/gu;
 
+const FOLD_CACHE = new Map<string, string>();
+
 /** One character as a reader sees it: NFKC, invisible characters dropped, lookalikes. */
 function foldChar(ch: string): string {
-  let out = '';
+  // ASCII is stable under NFKC: only the lookalike table applies.
+  if (ch.length === 1 && ch.charCodeAt(0) < 0x80) return LOOKALIKES[ch] ?? ch;
+  let out = FOLD_CACHE.get(ch);
+  if (out !== undefined) return out;
+  out = '';
   for (const c of ch.normalize('NFKC').replace(INVISIBLE, '')) out += LOOKALIKES[c] ?? c;
+  if (FOLD_CACHE.size < 65_536) FOLD_CACHE.set(ch, out);
   return out;
 }
 

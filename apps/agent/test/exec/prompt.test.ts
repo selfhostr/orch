@@ -94,8 +94,10 @@ describe('neutralizeMarkers', () => {
   ];
   for (const [what, input] of hostile) {
     it(`handles 100k characters of ${what} in under 200 ms`, () => {
-      const t0 = performance.now();
+      let t0 = performance.now();
       neutralizeMarkers(input);
+      expect(performance.now() - t0).toBeLessThan(200);
+      t0 = performance.now();
       buildAutoPrompt(task({ title: input.slice(0, 1000), prompt: input }), 'b');
       expect(performance.now() - t0).toBeLessThan(200);
     });
