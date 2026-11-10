@@ -14,7 +14,7 @@ The stack (`deploy/server/compose.yaml`) has these pieces:
 
 ## 1. DNS
 
-Create an `A` (and optionally `AAAA`) record for your domain, for example `orch-app.selfhostr.io`, pointing at the host. Caddy requests the Let's Encrypt certificate on first start, so DNS must resolve before you start the stack.
+Create an `A` (and optionally `AAAA`) record for your domain, for example `orch.example.com`, pointing at the host. Caddy requests the Let's Encrypt certificate on first start, so DNS must resolve before you start the stack.
 
 ## 2. Get the deployment files
 
@@ -34,11 +34,11 @@ openssl rand -base64 32   # ORCH_ENCRYPTION_KEY
 openssl rand -hex 32      # GITHUB_WEBHOOK_SECRET
 ```
 
-The variables are listed in the {ref}`server environment table <server-env>`. The GitHub values come from {doc}`github-app`.
+The variables are listed in the {ref}`server environment table <server-env>`. Besides `ORCH_DOMAIN` and the secrets, set `ORCH_ADMIN_GITHUB_LOGINS` (your GitHub login): in production the server refuses to start without an admin or an allowlist. The GitHub values come from {doc}`github-app`.
 
 ## 4. Put the GitHub App private key in place
 
-Create the App first ({doc}`github-app`), then:
+Create the App first ({doc}`github-app`; you can do it before step 3 is finished, its webhook secret is `GITHUB_WEBHOOK_SECRET`), then:
 
 ```sh
 mkdir -p secrets
@@ -60,10 +60,10 @@ The server applies database migrations on every start. Check it:
 
 ```sh
 docker compose ps
-curl -fsS https://orch-app.selfhostr.io/healthz     # {"status":"ok"}
+curl -fsS https://orch.example.com/healthz     # {"status":"ok"}
 ```
 
-If you change `HTTP_PORT` or `HTTPS_PORT`, the Let's Encrypt challenge cannot succeed on its own. Use Caddy behind another proxy that owns 80/443, or a DNS challenge build of Caddy.
+If you change `HTTP_PORT` or `HTTPS_PORT`, the Let's Encrypt challenge cannot succeed on its own. Use Caddy behind another proxy that owns 80/443, or a DNS challenge build of Caddy. Behind Cloudflare Tunnel, see [Behind Cloudflare Tunnel](#behind-cloudflare-tunnel).
 
 ## Managing access
 
@@ -76,17 +76,47 @@ Who may sign in is explained in {ref}`access-control`. Admins (`ORCH_ADMIN_GITHU
 
 The env lists keep working for people who should always have access (logins, whole organizations). Every decision is written to the audit log.
 
-## Behind Cloudflare Tunnel
+## Monitoring
+
+The server exposes `/healthz` (liveness) and `/readyz` (database reachable), plus optional Prometheus metrics and OpenTelemetry traces. See {doc}`observability` for the metrics, the optional Prometheus and Grafana stack in `deploy/observability/`, and how `/metrics` stays off the public internet.
+
+## Upgrading
+
+```sh
+git pull
+docker compose pull && docker compose up -d     # or: docker compose up -d --build
+```
+
+Servers on v0.9.0 or older: see [Moving from `ghcr.io/theroxat`](#moving-from-ghcriotheroxat-historical) first.
+
+Members upgrade their agent with `docker compose -f ~/orch/compose.yaml pull && docker compose -f ~/orch/compose.yaml up -d`, or with one click, see {ref}`updating-agents`.
+
+## Backups and restore
+
+The `backup` service dumps the database every night at 03:00 UTC (`BACKUP_SCHEDULE`), keeps 7 daily, 4 weekly and 6 monthly dumps, and can encrypt them (age) and upload them to S3-compatible storage. To restore:
+
+```sh
+backup/restore.sh --list
+backup/restore.sh            # newest dump, asks for confirmation
+```
+
+The dump does **not** contain `.env` (notably `ORCH_ENCRYPTION_KEY`) or the GitHub App private key: keep them separately. Details, encryption, off-site copies and what is not backed up are in {doc}`backups`.
+
+## Advanced and historical
+
+Not needed for a first install. The standard path is the five steps above with ACME certificates and a single server instance.
+
+### Behind Cloudflare Tunnel
 
 If you host behind a Cloudflare Tunnel, Cloudflare terminates TLS for your domain and `cloudflared` forwards plain HTTP to a local port. There is no ACME and ports 80 and 443 are not used. Set these in `.env`:
 
 ```sh
-ORCH_DOMAIN=orch-app.selfhostr.io
+ORCH_DOMAIN=orch.example.com
 ORCH_TLS_MODE=tunnel                      # default is acme
 HTTP_PORT=8495                            # local port cloudflared connects to
 ORCH_BIND_ADDR=127.0.0.1                  # keep the port off the LAN
 HTTPS_PUBLISH=127.0.0.1:                  # nothing serves 443; maps it to a random loopback port
-ORCH_PUBLIC_URL=https://orch-app.selfhostr.io # always https
+ORCH_PUBLIC_URL=https://orch.example.com # always https
 ```
 
 In this mode Caddy serves plain HTTP only (`auto_https off`, no HSTS; Cloudflare can add HSTS at the edge). The routes and the Content-Security-Policy are the same as in ACME mode. The server builds the GitHub OAuth callback, the `install.sh` URL, the install and `claude mcp add` commands and the `Secure` session cookie from `ORCH_PUBLIC_URL`, so they say `https` even though the request reached the server over HTTP. It trusts `X-Forwarded-For` only from private networks (the Caddy container), see `ORCH_TRUST_PROXY`.
@@ -95,7 +125,7 @@ In this mode Caddy serves plain HTTP only (`auto_https off`, no HSTS; Cloudflare
 
 ```yaml
 ingress:
-  - hostname: orch-app.selfhostr.io
+  - hostname: orch.example.com
     service: http://localhost:8495
   - service: http_status:404
 ```
@@ -113,7 +143,7 @@ Notes:
 
 (multi-instance)=
 
-## Running several server instances
+### Running several server instances
 
 One server handles a team comfortably; run several to keep orch up while one restarts (upgrades, host maintenance) or crashes. The instances share **Postgres and nothing else**: no Redis, no shared disk, no sticky sessions.
 
@@ -151,28 +181,6 @@ What runs where:
 
 **Failure behaviour.** Messages between instances are best effort; the database stays the truth and each instance reloads the agent directory every `ORCH_INSTANCE_HEARTBEAT_MS` (10 s) and after a reconnect. A leader whose host vanishes without closing its connection keeps its lock until Postgres notices (about 25 s: the server sets short TCP keepalives on that connection). An instance that crashes is considered gone after three missed heartbeats (30 s): until then, offers relayed to its agents time out (5 s) and are treated as undeliverable, and its agents reconnect elsewhere. Running alone, an instance costs one heartbeat query every 10 s and one row write per agent connect or disconnect; nothing is added to request paths.
 
-## Monitoring
+### Moving from `ghcr.io/theroxat` (historical)
 
-The server exposes `/healthz` (liveness) and `/readyz` (database reachable), plus optional Prometheus metrics and OpenTelemetry traces. See {doc}`observability` for the metrics, the optional Prometheus and Grafana stack in `deploy/observability/`, and how `/metrics` stays off the public internet.
-
-## Upgrading
-
-```sh
-git pull
-docker compose pull && docker compose up -d     # or: docker compose up -d --build
-```
-
-**Moving from `ghcr.io/theroxat` (servers on v0.9.0 or older).** Releases after v0.9.0 are published only as `ghcr.io/selfhostr/orch-server`, `orch-web` and `orch-agent`; `deploy/server/compose.yaml` now uses those names. If `.env` pins `ORCH_VERSION` to an old release, set it to the new one before `docker compose pull`, and remove any `ORCH_AGENT_IMAGE_REPO=ghcr.io/theroxat/orch-agent` override (the default is now `ghcr.io/selfhostr/orch-agent`). Agents from v0.9.0 and older must be switched once by hand, see {ref}`updating-agents`.
-
-Members upgrade their agent with `docker compose -f ~/orch/compose.yaml pull && docker compose -f ~/orch/compose.yaml up -d`, or with one click, see {ref}`updating-agents`.
-
-## Backups and restore
-
-The `backup` service dumps the database every night at 03:00 UTC (`BACKUP_SCHEDULE`), keeps 7 daily, 4 weekly and 6 monthly dumps, and can encrypt them (age) and upload them to S3-compatible storage. To restore:
-
-```sh
-backup/restore.sh --list
-backup/restore.sh            # newest dump, asks for confirmation
-```
-
-The dump does **not** contain `.env` (notably `ORCH_ENCRYPTION_KEY`) or the GitHub App private key: keep them separately. Details, encryption, off-site copies and what is not backed up are in {doc}`backups`.
+For servers on v0.9.0 or older. Releases after v0.9.0 are published only as `ghcr.io/selfhostr/orch-server`, `orch-web` and `orch-agent`; `deploy/server/compose.yaml` now uses those names. If `.env` pins `ORCH_VERSION` to an old release, set it to the new one before `docker compose pull`, and remove any `ORCH_AGENT_IMAGE_REPO=ghcr.io/theroxat/orch-agent` override (the default is now `ghcr.io/selfhostr/orch-agent`). Agents from v0.9.0 and older must be switched once by hand, see {ref}`updating-agents`.
