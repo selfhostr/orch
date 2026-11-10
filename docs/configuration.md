@@ -132,6 +132,7 @@ These have defaults and are defined in `apps/server/src/config/index.ts`. To cha
 | `PRO_WINDOW_WEIGHTED`         | 44000                        | Weighted tokens of a Pro 5-hour window (base of S/M/L estimates)                                                |
 | `EXEC_LEASE_GRACE_SEC`        | 900                          | Grace added to task timeouts before an auto run is declared lost                                                |
 | `AGENT_LEASE_SEC`             | 1800                         | Running assignments of an agent unseen this long become lost                                                    |
+| `CLAIM_CONFIRM_SEC`           | 300                          | A claim whose offer relay got no answer is cancelled if the agent reports nothing for this long                 |
 | `AGENT_HEARTBEAT_SEC`         | 30                           | Agent heartbeat interval                                                                                        |
 | `AGENT_HEARTBEAT_TIMEOUT_MS`  | 90000                        | Agent considered offline after this                                                                             |
 | `AGENT_USAGE_SEC`             | 300                          | Usage report interval                                                                                           |
