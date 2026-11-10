@@ -17,6 +17,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Security
 
+- A release tag is refused unless its commit is on `main` and every CI run of that commit succeeded. The `latest` image tag only moves for a stable version, never for a pre-release such as `v1.0.0-rc.1`. The release checkout no longer keeps the workflow token.
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
 
 ## 0.9.1 - 2026-11-04
