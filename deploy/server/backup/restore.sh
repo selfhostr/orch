@@ -76,8 +76,21 @@ dc() { docker compose "$@"; }
 # As uid 70, the owner of the dumps (the container has no capability to read other users' files).
 # The volume is mounted read-only: this script only ever reads dumps.
 in_backup() {
-  [ -f "$TMP/ro.yaml" ] || printf 'services:\n  backup:\n    volumes:\n      - "%s:/backups:ro"\n' "${BACKUP_VOLUME:-backups}" >"$TMP/ro.yaml"
-  docker compose -f compose.yaml -f "$TMP/ro.yaml" run --rm --no-deps -T --user 70:70 "$@"
+  # The override is added after the user's compose files (COMPOSE_FILE, or compose.yaml plus
+  # compose.override.yaml by default). The variable is left for compose to expand, so a
+  # BACKUP_VOLUME set only in .env is honoured.
+  if [ ! -f "$TMP/ro.yaml" ]; then
+    # shellcheck disable=SC2016 # expanded by compose
+    printf 'services:\n  backup:\n    volumes:\n      - "${BACKUP_VOLUME:-backups}:/backups:ro"\n' >"$TMP/ro.yaml"
+  fi
+  sep="${COMPOSE_PATH_SEPARATOR:-:}"
+  if [ -n "${COMPOSE_FILE:-}" ]; then
+    files="$COMPOSE_FILE"
+  else
+    files="compose.yaml"
+    [ ! -f compose.override.yaml ] || files="$files${sep}compose.override.yaml"
+  fi
+  COMPOSE_FILE="$files${sep}$TMP/ro.yaml" docker compose run --rm --no-deps -T --user 70:70 "$@"
 }
 
 list_volume() { in_backup --entrypoint ls backup -1 /backups | sort; }
@@ -87,29 +100,74 @@ list_volume() { in_backup --entrypoint ls backup -1 /backups | sort; }
 TMP="$(mktemp -d "${ORCH_RESTORE_TMPDIR:-$PWD}/.restore.XXXXXX")"
 SERVER_STOPPED=false
 RESTORING=false
+RESTORE_FAILED=false
+RESTORE_ENDED=""
 SCRATCH=""
+# Killing the client of `docker compose exec` does not always kill pg_restore in the container.
+# Terminate its database connections (application_name pg_restore) and wait until they are gone:
+# a transaction that is cut mid-way is rolled back. Sets RESTORE_ENDED to the number of
+# connections terminated, or "unknown" when that could not be done.
+end_restore() {
+  RESTORE_ENDED=unknown
+  # shellcheck disable=SC2016 # expanded inside the container
+  n="$(dc exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA' 2>/dev/null <<'SQL'
+select count(*) from (select pg_terminate_backend(pid) from pg_stat_activity where application_name = 'pg_restore' and pid <> pg_backend_pid()) t;
+SQL
+  )" || return 0
+  i=0
+  while [ "$i" -lt 30 ]; do
+    # shellcheck disable=SC2016 # expanded inside the container
+    left="$(dc exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA' 2>/dev/null <<'SQL'
+select count(*) from pg_stat_activity where application_name = 'pg_restore';
+SQL
+    )" || return 0
+    if [ "$left" = 0 ]; then
+      RESTORE_ENDED="$n"
+      return 0
+    fi
+    i=$((i + 1))
+    sleep 1
+  done
+}
+report_restore_state() {
+  if $RESTORE_FAILED; then
+    printf 'restore: pg_restore failed. It ran with --single-transaction, so the database is unchanged.\n' >&2
+  elif [ "$RESTORE_ENDED" != unknown ] && [ "${RESTORE_ENDED:-0}" -gt 0 ] 2>/dev/null; then
+    printf 'restore: interrupted. pg_restore was cut off and, running with --single-transaction, it was rolled back: the database is unchanged.\n' >&2
+  else
+    printf 'restore: interrupted and the state of the database is UNCERTAIN (the restore may have completed or not).\n' >&2
+    printf 'restore: run the restore again to be sure (the dump is replaced as a whole, so repeating it is safe).\n' >&2
+  fi
+}
 # Whatever happens (failure, Ctrl-C), remove what we created and bring the server back if we stopped it.
 cleanup() {
   rc=$?
-  trap - EXIT INT TERM
+  # A second signal must not interrupt the cleanup.
+  trap '' HUP INT QUIT TERM
+  trap - EXIT
   rm -rf "$TMP"
   if [ -n "$SCRATCH" ]; then
     docker rm -fv "$SCRATCH" >/dev/null 2>&1 || true
   fi
   if $SERVER_STOPPED; then
+    # End a pg_restore that may still run in the container BEFORE the server is started again.
+    if $RESTORING && ! $RESTORE_FAILED; then
+      end_restore
+    fi
     printf 'restore: starting server again\n' >&2
     if ! dc up -d server >&2; then
       printf 'restore: could not start the server, run: docker compose up -d server\n' >&2
     fi
     if $RESTORING && [ "$rc" -ne 0 ]; then
-      printf 'restore: interrupted or failed during pg_restore. It runs in one transaction, so the database\n' >&2
-      printf 'restore: should be unchanged; check it, and rerun after fixing the cause.\n' >&2
+      report_restore_state
     fi
   fi
   exit "$rc"
 }
 trap cleanup EXIT
+trap 'exit 129' HUP
 trap 'exit 130' INT
+trap 'exit 131' QUIT
 trap 'exit 143' TERM
 umask 077
 
@@ -212,11 +270,16 @@ SERVER_STOPPED=true
 dc stop server
 printf 'restore: restoring %s\n' "$NAME"
 RESTORING=true
+rc=0
 # shellcheck disable=SC2016 # $POSTGRES_* must expand inside the container
-if ! dc exec -T postgres sh -c \
+dc exec -T postgres sh -c \
   'pg_restore --clean --if-exists --no-owner --single-transaction --exit-on-error -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
-  <"$TMP/dump"; then
-  printf 'restore: pg_restore FAILED, the database was left unchanged (single transaction).\n' >&2
+  <"$TMP/dump" || rc=$?
+if [ "$rc" -ne 0 ]; then
+  # Exit status 1 is pg_restore reporting an error (rolled back). Anything else (killed, docker
+  # failure) leaves the state to be established by cleanup.
+  [ "$rc" -ne 1 ] || RESTORE_FAILED=true
+  printf 'restore: pg_restore FAILED (exit %s).\n' "$rc" >&2
   exit 1
 fi
 RESTORING=false

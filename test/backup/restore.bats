@@ -12,18 +12,20 @@ setup() {
   cat >"$T/bin/docker" <<'F'
 #!/bin/sh
 echo "docker $*" >>"$CALLS"
+[ -z "${COMPOSE_FILE:-}" ] || { echo "COMPOSE_FILE=$COMPOSE_FILE" >>"$CALLS"; cp "${COMPOSE_FILE##*:}" "$CALLS.ro" 2>/dev/null || true; }
 case "$*" in
   *"--entrypoint ls"*) printf 'orch-20261020T030000Z.dump\norch-20261021T030000Z.dump\nnotes.txt\n' ;;
   *"--entrypoint cat"*) printf 'PGDMPfake' ;;
   *"age -d"*) printf 'PGDMPdecrypted' ;;
   *"compose config --images"*) printf 'postgres:15-alpine\nghcr.io/selfhostr/orch-server:0.9\n' ;;
+  *"exec -T postgres sh -c psql"*) q="$(cat)"; case "$q" in *pg_terminate_backend*) echo "${FAKE_TERMINATED:-1}" ;; *) echo 0 ;; esac ;;
   *"exec -T postgres sh -c pg_restore --list"*) cat >"$CALLS.list"; [ -z "${FAKE_LIST_FAIL:-}" ] || exit 1 ;;
   *"exec -i orch-restore-verify"*"pg_restore --list"*) cat >/dev/null; [ -z "${FAKE_LIST_FAIL:-}" ] || exit 1 ;;
   *"exec -i orch-restore-verify"*) cat >"$CALLS.stdin"; [ -z "${FAKE_RESTORE_FAIL:-}" ] || exit 1 ;;
   *"to_regclass"*) [ -n "${FAKE_NO_MIGRATIONS:-}" ] && echo f || echo t ;;
   *"count(*) from information_schema"*) echo 7 ;;
   *"query_to_xml"*) printf 'Project 3\n_prisma_migrations 12\n' ;;
-  *"exec -T postgres"*) cat >"$CALLS.stdin"; [ -z "${FAKE_RESTORE_KILL:-}" ] || { kill -TERM "$PPID"; sleep 0.3; }; [ -z "${FAKE_RESTORE_FAIL:-}" ] || exit 1 ;;
+  *"exec -T postgres"*) cat >"$CALLS.stdin"; [ -z "${FAKE_RESTORE_KILL:-}" ] || { kill -"${FAKE_RESTORE_KILL}" "$PPID"; sleep 0.3; }; [ -z "${FAKE_RESTORE_FAIL:-}" ] || exit 1 ;;
 esac
 exit 0
 F
@@ -125,7 +127,7 @@ F
 }
 
 @test "an interrupted restore (TERM after the server was stopped) starts the server again" {
-  FAKE_RESTORE_KILL=1 run sh "$R" --yes
+  FAKE_RESTORE_KILL=TERM run sh "$R" --yes
   [ "$status" -ne 0 ]
   grep -q 'up -d server' "$CALLS"
 }
@@ -147,9 +149,41 @@ F
 }
 
 @test "an interrupted restore says where it stands" {
-  FAKE_RESTORE_KILL=1 run sh "$R" --yes
+  FAKE_RESTORE_KILL=TERM run sh "$R" --yes
   [ "$status" -ne 0 ]
-  [[ "$output" == *"should be unchanged"* ]]
+  [[ "$output" == *"rolled back"* ]]
+  grep -q 'pg_terminate_backend\|exec -T postgres sh -c psql' "$CALLS"
+  # connections are ended before the server is started again
+  term="$(grep -n 'sh -c psql' "$CALLS" | head -n 1 | cut -d: -f1)"
+  start="$(grep -n 'up -d server' "$CALLS" | cut -d: -f1)"
+  [ "$term" -lt "$start" ]
+}
+
+@test "an interrupted restore with no pg_restore connection found reports an uncertain state" {
+  FAKE_TERMINATED=0 FAKE_RESTORE_KILL=TERM run sh "$R" --yes
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"UNCERTAIN"* ]]
+  [[ "$output" == *"run the restore again"* ]]
+  grep -q 'up -d server' "$CALLS"
+}
+
+@test "a hangup (lost SSH session) and a quit start the server again" {
+  for sig in HUP QUIT; do
+    : >"$CALLS"
+    FAKE_RESTORE_KILL=$sig run sh "$R" --yes
+    [ "$status" -ne 0 ]
+    grep -q 'up -d server' "$CALLS"
+  done
+}
+
+@test "the backups volume comes from compose (BACKUP_VOLUME in .env is left to it) and the user's files are kept" {
+  run sh "$R" --list
+  [ "$status" -eq 0 ]
+  grep -q '^COMPOSE_FILE=compose.yaml:' "$CALLS"
+  grep -qF '${BACKUP_VOLUME:-backups}:/backups:ro' "$CALLS.ro"
+  : >"$CALLS"
+  COMPOSE_FILE=a.yaml:b.yaml run sh "$R" --list
+  grep -q '^COMPOSE_FILE=a.yaml:b.yaml:' "$CALLS"
 }
 
 @test "--verify restores into a throwaway postgres and never touches the server or the database" {
@@ -161,7 +195,7 @@ F
   grep -q 'docker run -d --name orch-restore-verify-.* --network none .*postgres:15-alpine' "$CALLS"
   [ "$(cat "$CALLS.stdin")" = "PGDMPfake" ]
   # backups volume mounted read-only through an override file
-  grep -q -- '-f compose.yaml -f .*ro.yaml' "$CALLS"
+  grep -q '^COMPOSE_FILE=.*ro.yaml' "$CALLS"
   # production untouched
   ! grep -q 'stop server' "$CALLS" || false
   ! grep -q 'up -d server' "$CALLS" || false
