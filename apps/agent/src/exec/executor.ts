@@ -76,7 +76,13 @@ import {
 import { ClaudeAuthState, CLAUDE_AUTH_REJECT_PREFIX } from '../claude-auth';
 import { parseResetTime } from '../usage/ratelimit';
 import { buildAutoPrompt, buildManualPrompt } from './prompt';
-import { CLAUDE_TOKEN_ENV, TASK_CLAUDE_CONFIG_DIR, buildCreateArgs } from './sandbox';
+import {
+  CLAUDE_TOKEN_EXEC_ARGS,
+  STOP_PREPARATION_SCRIPT,
+  TASK_CLAUDE_CONFIG_DIR,
+  buildCreateArgs,
+  claudeTokenEnv,
+} from './sandbox';
 import type { ScreenOps } from './screen';
 import { ACTIVE_STATES, TaskStore, type TaskRecord } from './state';
 import type { TokenPurpose } from './tokens';
@@ -826,9 +832,8 @@ export class ManualExecutor {
       return true;
     };
     try {
-      const claudeToken = this.deps.readClaudeToken();
-      if (!claudeToken) throw new Error('No Claude token. Run "orch login".');
-      agentSecrets.add(id, [claudeToken]);
+      // Checked early (no work without a token); passed later to the Claude exec only.
+      this.claudeToken(id);
       const r0 = rec();
       this.status(id, 'preparing', 'cloning');
       this.deps.fs.mkdir(r0.taskDir);
@@ -902,15 +907,31 @@ export class ManualExecutor {
         labels,
         containerEnv: env.containerEnv,
       });
-      await this.deps.docker.create(args, { [CLAUDE_TOKEN_ENV]: claudeToken });
+      // No token in the container config: it would be in `docker inspect` and in the environment
+      // of every command run in the container, the repository's postCreateCommand included.
+      await this.deps.docker.create(args);
       await this.deps.docker.copyIn(r0.container, this.cfg.claudeBin);
       await this.deps.docker.start(r0.container);
-      for (const argv of postCreateArgvs(env.postCreateCommand)) {
+      const postCreate = postCreateArgvs(env.postCreateCommand);
+      for (const argv of postCreate) {
         const res = await this.deps.docker.exec(r0.container, argv);
         if (res.code !== 0) {
           const w = `postCreateCommand failed (exit ${res.code}): ${res.stderr.trim().slice(-300)}`;
           this.log.warn(w);
           this.store.update(id, { warnings: [...rec().warnings, redact(w)] });
+        }
+      }
+      if (postCreate.length > 0) {
+        // A process left running by the preparation could read the Claude process's environment.
+        const res = await this.deps.docker.exec(r0.container, [
+          'sh',
+          '-c',
+          STOP_PREPARATION_SCRIPT,
+        ]);
+        if (res.code !== 0) {
+          throw new Error(
+            `Could not stop the processes left by postCreateCommand (exit ${res.code}): ${res.stderr.trim().slice(-300)}`,
+          );
         }
       }
       if (await abandoned()) return;
@@ -920,7 +941,7 @@ export class ManualExecutor {
         await this.runAuto(id, prompt);
         return;
       }
-      await this.deps.screen.start(r0.screen, this.claudeArgv(rec(), prompt));
+      await this.startScreen(rec(), prompt);
       if (await abandoned()) return;
       this.store.update(id, { prompt: null });
       this.status(id, 'running', `attach: ${attachCommand(r0.issueNumber)}`);
@@ -1004,8 +1025,33 @@ export class ManualExecutor {
     this.store.update(id, { warnings: [...r.warnings, w] });
   }
 
+  /** The member's Claude token, read at use time and masked in this task's output. */
+  private claudeToken(id: string): string {
+    const token = this.deps.readClaudeToken();
+    if (!token) throw new Error('No Claude token. Run "orch login".');
+    agentSecrets.add(id, [token]);
+    return token;
+  }
+
+  /**
+   * Starts (or re-creates) the manual session. The token is in the environment of the session's
+   * `docker exec` only, which hands it to the Claude process by name.
+   */
+  private async startScreen(r: TaskRecord, prompt: string | null): Promise<void> {
+    const token = this.claudeToken(r.assignmentId);
+    await this.deps.screen.start(r.screen, this.claudeArgv(r, prompt), claudeTokenEnv(token));
+  }
+
   private claudeArgv(r: TaskRecord, prompt: string | null): string[] {
-    const base = ['docker', 'exec', '-it', '-w', r.workspaceFolder, r.container];
+    const base = [
+      'docker',
+      'exec',
+      '-it',
+      ...CLAUDE_TOKEN_EXEC_ARGS,
+      '-w',
+      r.workspaceFolder,
+      r.container,
+    ];
     const model = claudeModel(r.model);
     if (prompt !== null) return [...base, this.cfg.claudeBin, '--model', model, prompt];
     // Session re-created after an agent restart: continue the last conversation if any.
@@ -1065,6 +1111,7 @@ export class ManualExecutor {
       runStartedAt: new Date(this.now()).toISOString(),
     });
     this.status(id, 'running', `claude -p (auto mode, timeout ${Math.round(timeoutSec / 60)} min)`);
+    const token = this.claudeToken(id);
     const argv = buildAutoArgv({
       container: r.container,
       workspaceFolder: r.workspaceFolder,
@@ -1097,6 +1144,7 @@ export class ManualExecutor {
         live?.stderr(line);
         stderrTail = `${stderrTail}\n${clean}`.slice(-1500);
       },
+      claudeTokenEnv(token),
     );
     this.runs.set(id, proc);
     let timedOut = false;
@@ -1443,7 +1491,7 @@ export class ManualExecutor {
   async attach(issueNumber: number, project?: string): Promise<string[]> {
     const rec = this.findManual(issueNumber, project);
     if (!(await this.deps.screen.exists(rec.screen))) {
-      await this.deps.screen.start(rec.screen, this.claudeArgv(rec, null));
+      await this.startScreen(rec, null);
     }
     return ['screen', '-r', rec.screen];
   }
@@ -1595,7 +1643,7 @@ export class ManualExecutor {
             if (rec.state === 'pushing')
               this.status(rec.assignmentId, 'running', 'agent restarted');
             if (!(await this.deps.screen.exists(rec.screen))) {
-              await this.deps.screen.start(rec.screen, this.claudeArgv(rec, null));
+              await this.startScreen(rec, null);
             }
           } else {
             await this.fail(rec.assignmentId, new Error('The task container disappeared.'));
