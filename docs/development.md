@@ -40,9 +40,7 @@ CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests, installer tests, br
 
 ## Dependency updates
 
-Dependencies are kept up to date by [Renovate](https://docs.renovatebot.com/), configured in `renovate.json` at the repository root. Renovate opens grouped pull requests on Monday mornings (before 6am, Europe/Paris) for npm, GitHub Actions, Docker base images and Prisma, React and Vitest packages. A dependency dashboard issue lists all pending updates. Nothing is merged automatically: every Renovate pull request waits for a review. Dockerfile base images and GitHub Actions are pinned by digest; images in the compose files are not (operators pull them by tag).
-
-Renovate only runs once its GitHub App is installed on the repository. The repository owner must install it at <https://github.com/apps/renovate> and grant access to `selfhostr/orch`.
+Dependencies are kept up to date by Dependabot, configured in `.github/dependabot.yml`. It opens grouped weekly pull requests for npm (the pnpm workspace at the root and `test/ui`), Docker base images, the compose files and GitHub Actions. Minor and patch updates are grouped, major npm updates are ignored and done by hand. Nothing is merged automatically: every Dependabot pull request waits for a review. Dockerfile base images and GitHub Actions are pinned by digest or commit SHA; images in the compose files are not (operators pull them by tag).
 
 ## Documentation
 
