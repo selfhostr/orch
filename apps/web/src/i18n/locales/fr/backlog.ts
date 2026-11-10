@@ -55,6 +55,10 @@ export default {
     label: 'Annuler la tâche',
     title: 'Annuler la tâche #{number} ?',
     body: '{title} quittera le tableau et ne sera pas exécutée. L’issue GitHub reste ouverte.',
+    dependents: {
+      one: '{count} tâche dépend de celle-ci ({list}) et restera bloquée.',
+      other: '{count} tâches dépendent de celle-ci ({list}) et resteront bloquées.',
+    },
     keep: 'Garder la tâche',
     confirm: 'Annuler la tâche',
   },

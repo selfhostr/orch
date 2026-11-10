@@ -52,6 +52,10 @@ export default {
     label: 'Cancel task',
     title: 'Cancel task #{number}?',
     body: '{title} will leave the board and will not run. The GitHub issue stays open.',
+    dependents: {
+      one: '{count} task depends on this one ({list}) and will stay blocked.',
+      other: '{count} tasks depend on this one ({list}) and will stay blocked.',
+    },
     keep: 'Keep task',
     confirm: 'Cancel task',
   },

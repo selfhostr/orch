@@ -100,7 +100,13 @@ export function registerTasks(
   app.post('/api/tasks/:id/cancel', async (req): Promise<{ ok: true }> => {
     const user = requireUser(req);
     const { id } = req.params as { id: string };
-    const [t, access] = await svc.getVisible(id, user);
+    // The same answer whether the task does not exist or its project is not visible.
+    const [t, access] = await svc.getVisible(id, user).catch((e: unknown) => {
+      if (e instanceof HttpError && e.status === 404) {
+        throw new HttpError(404, 'not_found', 'Task not found');
+      }
+      throw e;
+    });
     await cancelTask(deps.prisma, t, user, access, req.ip);
     await deps.dispatcher?.withdrawForTask(t.id, 'cancelled');
     return { ok: true };

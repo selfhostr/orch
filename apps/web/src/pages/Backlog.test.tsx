@@ -339,7 +339,13 @@ describe('Backlog', () => {
               ? [task({ id: 't9', issueNumber: 9, title: 'Other' })]
               : [
                   task({ canCancel: true }),
-                  task({ id: 't9', issueNumber: 9, title: 'Other', canCancel: false }),
+                  task({
+                    id: 't9',
+                    issueNumber: 9,
+                    title: 'Other',
+                    canCancel: false,
+                    dependsOn: [{ id: 't1', issueNumber: 1, title: 'First task', status: 'TODO' }],
+                  }),
                 ],
           }),
         }),
@@ -355,6 +361,7 @@ describe('Backlog', () => {
     fireEvent.click(within(card).getByRole('button', { name: 'Cancel #1' }));
     const dialog = await screen.findByRole('dialog', { name: 'Cancel task' });
     expect(within(dialog).getByText(/First task will leave the board/)).toBeTruthy();
+    expect(within(dialog).getByText(/1 task depends on this one \(#9\)/)).toBeTruthy();
     // Keeping the task sends nothing.
     fireEvent.click(within(dialog).getByRole('button', { name: 'Keep task' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

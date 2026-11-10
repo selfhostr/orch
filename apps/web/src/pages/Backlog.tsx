@@ -120,6 +120,8 @@ export function Backlog() {
       closeModal(() => setToCancel(null));
       await qc.invalidateQueries({ queryKey: ['tasks'] });
     },
+    // A 409 means the task moved on: refresh so the card loses its button.
+    onError: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
   });
   const imp = useMutation({
     mutationFn: importTasks,
@@ -146,6 +148,9 @@ export function Backlog() {
     ? canCreateIn(access[filter])
     : projects.some((p) => canCreateIn(access[p.id]));
   const allTasks: TaskView[] = board.data ? COLUMNS.flatMap((c) => board.data[c.status]) : [];
+  const dependents = toCancel
+    ? allTasks.filter((x) => x.dependsOn.some((d) => d.id === toCancel.id))
+    : [];
   const focusMissing = !!focusId && !!board.data && !allTasks.some((x) => x.id === focusId);
 
   return (
@@ -229,6 +234,14 @@ export function Backlog() {
           tone="danger"
         >
           <p>{t('backlog.cancel.body', { title: toCancel.title })}</p>
+          {dependents.length > 0 && (
+            <p className="warning">
+              {t('backlog.cancel.dependents', {
+                count: dependents.length,
+                list: dependents.map((d) => `#${d.issueNumber}`).join(', '),
+              })}
+            </p>
+          )}
           {cancel.error && <p className="error">{errorMessage(cancel.error)}</p>}
           <div className="modal-actions">
             <button onClick={() => closeModal(() => setToCancel(null))}>
