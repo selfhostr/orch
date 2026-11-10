@@ -103,6 +103,9 @@ export function notParticipatingBackoffMs(rejections: number): number {
  */
 export const FAILED_RETRIES_BEFORE_SHUT_OUT = 5;
 
+/** Times an unconfirmed manual claim's offer is sent again during its lease. */
+export const CLAIM_RESENDS = 2;
+
 /** A manual claim still waiting for the agent to confirm a relayed offer (see the gateway). */
 function isUnconfirmedClaim(a: Assignment): boolean {
   return a.kind === 'CLAIM' && a.status === 'ACCEPTED' && !a.startedAt && !!a.leaseExpiresAt;
@@ -193,6 +196,9 @@ export class Dispatcher {
   /** Runs ticks: always when alone, while holding the `dispatcher` leadership otherwise. */
   private leading = false;
   private forwarding = false;
+
+  /** Unconfirmed manual claim id -> how many times its offer was sent again. */
+  private readonly claimResends = new Map<string, number>();
 
   constructor(private readonly deps: DispatcherDeps) {}
 
@@ -300,6 +306,7 @@ export class Dispatcher {
     try {
       await this.expireOffers(now);
       await this.expireLeases(now);
+      await this.resendUnconfirmedClaims(now);
       await this.dispatchOpenTasks(now);
     } finally {
       stop?.();
@@ -1088,6 +1095,51 @@ export class Dispatcher {
   }
 
   /**
+   * During its short lease, an unconfirmed manual claim's offer is sent again CLAIM_RESENDS times,
+   * evenly spaced (not at every tick). The agent ignores an offer it already has.
+   */
+  private async resendUnconfirmedClaims(now: Date): Promise<void> {
+    const list = await this.prisma.assignment.findMany({
+      where: {
+        kind: 'CLAIM',
+        status: 'ACCEPTED',
+        startedAt: null,
+        leaseExpiresAt: { gt: now },
+      },
+    });
+    const live = new Set(list.map((a) => a.id));
+    for (const id of this.claimResends.keys()) if (!live.has(id)) this.claimResends.delete(id);
+    const gap = (this.deps.config.CLAIM_CONFIRM_SEC * 1000) / (CLAIM_RESENDS + 1);
+    for (const a of list) {
+      const sent = this.claimResends.get(a.id) ?? 0;
+      const since = (a.respondedAt ?? a.createdAt).getTime();
+      if (sent >= CLAIM_RESENDS || now.getTime() - since < gap * (sent + 1)) continue;
+      this.claimResends.set(a.id, sent + 1);
+      await this.resendClaim(a);
+    }
+  }
+
+  /** Sends a manual claim's offer again. Any refusal is left to the lease's end. */
+  private async resendClaim(a: Assignment): Promise<void> {
+    if (!a.agentId) return;
+    const task = await this.loadTask(a.taskId);
+    const base = this.offerPayload(task, a, 'CONSENT_REQUEST');
+    try {
+      await this.gateway.sendOffer(a.agentId, {
+        assignmentId: a.id,
+        kind: 'CLAIM',
+        expiresAt: null,
+        initiatedBy: 'server',
+        execMode: 'MANUAL',
+        accepted: true,
+        task: base.task,
+      });
+    } catch (err) {
+      if (!(err instanceof OfferRefusedError)) throw err;
+    }
+  }
+
+  /**
    * A manual claim whose relayed offer was never confirmed goes back to the pool as CANCELLED, not
    * LOST: a delivery failure does not shut the member out of the task (SHUT_OUT).
    */
@@ -1463,7 +1515,7 @@ export class Dispatcher {
       }
     }
     // A manual claim whose relayed offer got no answer, absent from what the agent runs: it never
-    // arrived. Back to the pool.
+    // arrived. Sent again (a known offer is ignored by the agent); the lease's end cancels it.
     const unconfirmed = await prisma.assignment.findMany({
       where: {
         agentId,
@@ -1474,7 +1526,7 @@ export class Dispatcher {
       },
     });
     for (const a of unconfirmed) {
-      if (!known.has(a.id)) await this.undoUnconfirmedClaim(a, 'not_running', now);
+      if (!known.has(a.id)) await this.resendClaim(a);
     }
     const resend = await prisma.assignment.findMany({
       where: {

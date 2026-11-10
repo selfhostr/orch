@@ -232,6 +232,11 @@ const ConfigSchema = z.object({
   OTEL_EXPORTER_OTLP_ENDPOINT: z.preprocess(emptyToUndefined, z.url().optional()),
   /** Running assignments of an agent unseen (and disconnected) for this long become LOST. */
   AGENT_LEASE_SEC: z.coerce.number().int().positive().default(1_800),
+  /**
+   * A manual claim whose relayed offer got no answer (another instance) waits this long for the
+   * agent's first report, the offer re-sent meanwhile, before it is cancelled.
+   */
+  CLAIM_CONFIRM_SEC: z.coerce.number().int().positive().default(300),
   // Notifications.
   /** Attempts per external delivery (Slack, Discord, webhook, e-mail) before giving up. */
   NOTIFY_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(4),

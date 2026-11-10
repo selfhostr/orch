@@ -547,8 +547,9 @@ export class AgentGateway {
    * the same claim path as `orch take` (manual mode), then the server tells that agent to start
    * it with `task.offer` kind CLAIM, `initiatedBy: "server"`. If the offer cannot be delivered the
    * claim is undone (task back to TODO). A relayed offer without an answer keeps the claim, with a
-   * lease: the agent's first progress report confirms it, a `hello` without it or the lease's end
-   * cancels it without excluding the member (see the dispatcher's undoUnconfirmedClaim).
+   * short lease: the agent's first progress report confirms it, the offer is re-sent meanwhile (at
+   * a `hello` without it, and by the dispatcher), and the lease's end cancels it without excluding
+   * the member (see the dispatcher's undoUnconfirmedClaim).
    */
   async claimForUser(
     userId: string,
@@ -613,10 +614,10 @@ export class AgentGateway {
       if (err.reason === 'unconfirmed') {
         await prisma.assignment.updateMany({
           where: { id: offer.assignmentId, status: 'ACCEPTED', startedAt: null },
-          // As long as an agent may stay silent before it counts as gone (AGENT_LEASE_SEC): an
-          // agent offline meanwhile, with its first report waiting in its outbox, keeps the run.
+          // Short (CLAIM_CONFIRM_SEC): the task is out of the pool for the whole team meanwhile,
+          // and the agent may never have received it. The dispatcher re-sends the offer.
           data: {
-            leaseExpiresAt: new Date(Date.now() + this.deps.config.AGENT_LEASE_SEC * 1000),
+            leaseExpiresAt: new Date(Date.now() + this.deps.config.CLAIM_CONFIRM_SEC * 1000),
           },
         });
         await audit(prisma, {

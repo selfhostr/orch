@@ -658,8 +658,21 @@ describe('two instances: a relayed claim without an answer', () => {
     });
   const lapse = (now: Date) =>
     (e.dispatcher as unknown as { expireLeases(now: Date): Promise<void> }).expireLeases(now);
-  // After the claim's lease (AGENT_LEASE_SEC, 30 min by default).
-  const later = () => new Date(Date.now() + 2 * 3600_000);
+  const resend = (now: Date) =>
+    (
+      e.dispatcher as unknown as { resendUnconfirmedClaims(now: Date): Promise<void> }
+    ).resendUnconfirmedClaims(now);
+  const inMs = (ms: number) => new Date(Date.now() + ms);
+  // After the claim's short lease (CLAIM_CONFIRM_SEC, 5 min by default).
+  const later = () => inMs(6 * 60_000);
+  const offersFor = (id: string) =>
+    agent.client.msgs.filter((m) => m.type === 'task.offer' && m.payload.assignmentId === id)
+      .length;
+  /** Leaves no live claim behind for the next test. */
+  async function finish(assignmentId: string, taskId: string) {
+    await prisma.assignment.update({ where: { id: assignmentId }, data: { status: 'FAILED' } });
+    await prisma.task.update({ where: { id: taskId }, data: { status: 'DONE' } });
+  }
   /** Ended without excluding the member: CANCELLED (not LOST, which SHUT_OUT counts). */
   async function expectNeutralUndo(assignmentId: string, taskId: string) {
     const row = await prisma.assignment.findUniqueOrThrow({ where: { id: assignmentId } });
@@ -692,49 +705,69 @@ describe('two instances: a relayed claim without an answer', () => {
     await prisma.assignment.update({ where: { id: r.assignmentId }, data: { status: 'FAILED' } });
   });
 
-  it('gives the task back when the agent says hello without it', async () => {
+  it('sends the offer again when the agent says hello without it', async () => {
     const t = await newTask();
     noAnswer(false);
     const r = await take(t);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    await reconnect(agent.credential, f);
-    await until(
-      async () =>
-        (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status !==
-        'ACCEPTED',
+    const re = await reconnect(agent.credential, f);
+    agent = { ...agent, ...re };
+    await agent.client.next('task.offer', (m) => m.payload.assignmentId === r.assignmentId);
+    const offer = agent.client.msgs.find(
+      (m) => m.type === 'task.offer' && m.payload.assignmentId === r.assignmentId,
     );
-    await expectNeutralUndo(r.assignmentId, t.id);
-    // The member can take it again at once.
-    noAnswer(false);
-    const again = await take(t);
-    expect(again.ok).toBe(true);
-    if (again.ok) {
-      await prisma.assignment.update({
-        where: { id: again.assignmentId },
-        data: { status: 'FAILED' },
-      });
-      await prisma.task.update({ where: { id: t.id }, data: { status: 'DONE' } });
-    }
-  });
-
-  it('gives the task back when the bounded wait ends without any report', async () => {
-    const t = await newTask();
-    noAnswer(false);
-    const r = await take(t);
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    await lapse(new Date());
+    expect(offer?.type === 'task.offer' && offer.payload).toMatchObject({
+      kind: 'CLAIM',
+      initiatedBy: 'server',
+      accepted: true,
+    });
     expect(
       (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status,
     ).toBe('ACCEPTED');
-    // Not before the agent lease: an agent offline for less keeps the run.
-    await lapse(new Date(Date.now() + 20 * 60_000));
+    await finish(r.assignmentId, t.id);
+  });
+
+  it('sends the offer again twice during the short lease, not at every tick', async () => {
+    const t = await newTask();
+    noAnswer(false);
+    const r = await take(t);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const id = r.assignmentId;
+    expect(offersFor(id)).toBe(0);
+    await resend(inMs(30_000));
+    await resend(inMs(60_000));
+    expect(offersFor(id)).toBe(0);
+    await resend(inMs(110_000));
+    await until(() => offersFor(id) === 1);
+    await resend(inMs(120_000));
+    await resend(inMs(210_000));
+    await until(() => offersFor(id) === 2);
+    await resend(inMs(280_000));
+    await resend(inMs(290_000));
+    await new Promise((res) => setTimeout(res, 300));
+    expect(offersFor(id)).toBe(2);
+    await finish(id, t.id);
+  });
+
+  it('cancels the claim, without shutting the member out, when the short lease ends', async () => {
+    const t = await newTask();
+    noAnswer(false);
+    const r = await take(t);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    await lapse(inMs(4 * 60_000));
     expect(
       (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status,
     ).toBe('ACCEPTED');
     await lapse(later());
     await expectNeutralUndo(r.assignmentId, t.id);
+    // The member can take it again at once.
+    noAnswer(false);
+    const again = await take(t);
+    expect(again.ok).toBe(true);
+    if (again.ok) await finish(again.assignmentId, t.id);
   });
 });
 
