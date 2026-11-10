@@ -6,3 +6,8 @@ allowBuilds:
   esbuild: true
   prisma: true
   protobufjs: false
+# Advisories GHSA-g3hv-75wg-m249 (minimatch) and GHSA-3g3m-2fjr-6pw4 (glob): transitive copies
+# (OpenTelemetry gcp-metadata via rimraf, workbox-build, eslint) are forced to the patched versions.
+overrides:
+  glob@<14.0.2: ^14.0.2
+  minimatch@>=7 <11.0.1: ^11.0.1

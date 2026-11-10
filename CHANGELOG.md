@@ -6,16 +6,24 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Added
 
+- The CI job "Licences and advisories" also runs `pnpm audit --prod --audit-level=high` (high and critical advisories in production dependencies fail the build).
 - A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm run check:licences`).
 - The README states that the agent image installs Claude Code, which is proprietary software from Anthropic, and that orch itself is MIT.
+- `install.sh` lets the member choose the Claude plan (`ORCH_PLAN`, or a question on a terminal) instead of always writing `pro`, and checks for Docker 26 or newer and a reachable daemon with a message that says what to do.
 
 ### Changed
 
+- Dependabot is the only dependency update tool: the second, unused update configuration is removed.
 - The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.
 
 ### Security
 
 - The task prompt neutralizes the `<<<ORCH_ISSUE_BEGIN>>>` and `<<<ORCH_ISSUE_END>>>` delimiters in every field that comes from outside the agent: title, body, each acceptance criterion, repository name and branch. Before, only the body was cleaned, so a title containing the closing delimiter could end the issue block and add text that read as orch's own instructions. Lookalikes are caught too, on a normalized copy of the text (NFKC, zero-width and other format characters, combining marks and variation selectors removed): any case, spaces, dashes or dots between the words, two chevrons instead of three, full-width characters and common Greek and Cyrillic letters (best effort, not every lookalike). A truncated issue keeps its closing delimiter.
+- The Claude token is no longer part of the task container (agent). It was passed to `docker create`, so it showed in `docker inspect` and in the environment of the repository's `postCreateCommand` and of `orch shell`, which could read it without any prompt injection. It is now passed only to the `docker exec` that starts Claude (auto run, manual session, re-created session, login check), by name. Before Claude starts, the processes left running by `postCreateCommand` are stopped (the task fails if they cannot be) and the image's `HEALTHCHECK` is disabled. Behaviour change: a background service started by `postCreateCommand` no longer survives until the task; start it from Claude or the project's scripts, or as a compose sidecar. Once Claude runs, the commands it starts still inherit the token, and a hostile task image still controls the programs in the container (see the security model).
+- MCP OAuth: a client's https `redirect_uri` must be on a host listed in the new `ORCH_OAUTH_REDIRECT_HOSTS` (exact match, default `claude.ai,claude.com`); loopback http (`127.0.0.1`, `[::1]`, `localhost`, any port) is still accepted. Before, any https address was, so a client registered as "Claude Code" could send an approved code to any site. The rule applies at registration and again at every authorization and token request, so clients registered earlier with another https host are refused (register again from Claude Code, or add the host to the list); access tokens they already hold stay valid until they expire (1 hour). `ORCH_OAUTH_REDIRECT_HOSTS=none` allows loopback only. An invalid authorization request is no longer redirected to an address that is not allowed (open redirect), and the consent page states where the browser and code will go.
+- The base images of the server, web, agent and tools Dockerfiles are pinned by digest (tag kept in front of it). The agent image installs an exact Claude Code version (`CLAUDE_CODE_VERSION`, currently 2.1.318, the one shipped in 0.9.1) instead of whatever is latest at build time.
+- `glob` and `minimatch` are forced to patched versions (GHSA-3g3m-2fjr-6pw4, GHSA-g3hv-75wg-m249) through `overrides` in `pnpm-workspace.yaml`.
+- A release tag is refused unless its commit is on `main` and every CI run of that commit succeeded. The `latest` image tag only moves for a stable version, never for a pre-release such as `v1.0.0-rc.1`. The release checkout no longer keeps the workflow token.
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
 
 ## 0.9.1 - 2026-11-04
