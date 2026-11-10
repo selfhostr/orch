@@ -5,13 +5,10 @@
 # The server is TypeScript run through tsx (no compile step); the Prisma CLI is needed for
 # `prisma migrate deploy` at start. Both are installed at the versions pinned in pnpm-lock.yaml.
 
-ARG NODE_IMAGE=node:24-alpine
-# The runtime is plain Alpine plus the node binary: copying it (instead of using the node image)
-# leaves npm, yarn and corepack out of the image layers entirely.
-ARG RUNTIME_IMAGE=alpine:3.24
+# Base images are pinned by digest (tag kept readable); Dependabot bumps both together.
 
 # ---- build: resolve dependencies, generate the Prisma client, prune to production deps ----
-FROM ${NODE_IMAGE} AS build
+FROM node:24-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8 AS build
 RUN apk add --no-cache openssl ca-certificates
 ENV COREPACK_HOME=/opt/corepack \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
@@ -63,7 +60,9 @@ RUN TSX_VERSION="$(node -p "require('/repo/apps/server/node_modules/tsx/package.
  && find . \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -name '*.md' \) -type f -delete
 
 # ---- runtime ----
-FROM ${RUNTIME_IMAGE} AS runtime
+# The runtime is plain Alpine plus the node binary: copying it (instead of using the node image)
+# leaves npm, yarn and corepack out of the image layers entirely.
+FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
 RUN apk add --no-cache libstdc++ openssl ca-certificates tini \
  && addgroup -g 1000 node && adduser -u 1000 -G node -s /bin/sh -D node
 COPY --from=build /opt/node /usr/local/bin/node

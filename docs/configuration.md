@@ -8,7 +8,7 @@ Every environment variable and its default, for the server, the agent and develo
 
 | Variable                                                                                               | Required    | Meaning                                                                                                           |
 | ------------------------------------------------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| `ORCH_DOMAIN`                                                                                          | yes         | Public host name (example: `orch-app.selfhostr.io`)                                                               |
+| `ORCH_DOMAIN`                                                                                          | yes         | Public host name (example: `orch.example.com`)                                                                    |
 | `HTTP_PORT`, `HTTPS_PORT`                                                                              | no          | Host ports for Caddy (default 80 and 443). The only ports published                                               |
 | `ORCH_BASE_URL`                                                                                        | no          | Public URL, default `https://$ORCH_DOMAIN`. Set only for a non-standard port                                      |
 | `ORCH_TLS_MODE`, `ORCH_BIND_ADDR`, `HTTPS_PUBLISH`, `ORCH_PUBLIC_URL`                                  | no          | Cloudflare Tunnel mode, see [installation](installation.md#behind-cloudflare-tunnel)                              |

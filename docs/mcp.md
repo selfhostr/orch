@@ -47,6 +47,7 @@ claude mcp add --transport http --scope user orch https://<domain>/mcp \
 | `list_templates` | Task templates you can use (built-in, personal, project)   |
 | `take_task`      | Claim a task (same checks as `orch take`)                  |
 | `task_status`    | Status of a task                                           |
+| `retry_task`     | Offer a task again after failed runs (owner or creator)    |
 
 ## Task templates
 
