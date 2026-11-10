@@ -12,7 +12,10 @@ const MAX_PROMPT = 100_000;
  * Lookalikes of the delimiters, matched on a folded copy of the text (see `foldChar`): two or
  * more chevrons, any case, spaces, underscores, dashes or dots between the words.
  */
-const MARKER_RE = /<{2,}[\s_.-]*ORCH[\s_.-]*ISSUE[\s_.-]*(?:BEGIN|END)[\s_.-]*>{2,}/gi;
+// `(?<!<)`: a match is only tried at the start of a run of chevrons. Without it the search
+// restarts at every `<` of a long run (quadratic). Each separator class is followed by a letter or
+// `>` it cannot match, so backtracking inside a class stays within that run.
+const MARKER_RE = /(?<!<)<{2,}[\s_.-]*ORCH[\s_.-]*ISSUE[\s_.-]*(?:BEGIN|END)[\s_.-]*>{2,}/gi;
 const MARKER_PLACEHOLDER = '[marker removed]';
 /** Characters that NFKC leaves alone but a reader takes for one of the delimiter's characters. */
 const LOOKALIKES: Record<string, string> = {
@@ -41,12 +44,14 @@ const LOOKALIKES: Record<string, string> = {
   ...Object.fromEntries([...'\u0500\u0501\u216e\u217e'].map((c) => [c, 'D'])),
   ...Object.fromEntries([...'\u050c\u050d\u0262'].map((c) => [c, 'G'])),
 };
-const FORMAT_CHARS = /\p{Cf}/gu;
+/** Invisible to a reader: format characters (zero-width...) and marks (combining accents and
+ * underlines, variation selectors, the combining grapheme joiner). */
+const INVISIBLE = /[\p{Cf}\p{M}]/gu;
 
-/** One character as a reader sees it: NFKC, format characters (zero-width...) dropped, lookalikes. */
+/** One character as a reader sees it: NFKC, invisible characters dropped, lookalikes. */
 function foldChar(ch: string): string {
   let out = '';
-  for (const c of ch.normalize('NFKC').replace(FORMAT_CHARS, '')) out += LOOKALIKES[c] ?? c;
+  for (const c of ch.normalize('NFKC').replace(INVISIBLE, '')) out += LOOKALIKES[c] ?? c;
   return out;
 }
 
@@ -105,10 +110,12 @@ export function buildAutoPrompt(task: TaskOfferPayload['task'], branch: string):
   );
 }
 
+/** Neutralizes a field already cut to the prompt's size (the work stays bounded). */
+const safe = (value: string): string => neutralizeMarkers(value.slice(0, MAX_PROMPT));
+
 function buildPrompt(task: TaskOfferPayload['task'], branch: string, rules: string): string {
-  const safe = neutralizeMarkers;
   const criteria = task.acceptanceCriteria.length
-    ? task.acceptanceCriteria.map((c) => `- ${safe(c)}`).join('\n')
+    ? task.acceptanceCriteria.map((c) => `- ${c}`).join('\n')
     : '- (none given)';
   const head = [
     `You are working on issue #${task.issueNumber} of ${safe(task.project.fullName)}, branch ${safe(branch)}.`,
@@ -118,14 +125,10 @@ function buildPrompt(task: TaskOfferPayload['task'], branch: string, rules: stri
     '',
     ISSUE_BEGIN,
   ].join('\n');
-  const data = [
-    `Title: ${safe(task.title)}`,
-    '',
-    safe(task.prompt),
-    '',
-    'Acceptance criteria:',
-    criteria,
-  ].join('\n');
+  // The whole issue block at once, so a delimiter split across two fields is caught too.
+  const data = safe(
+    [`Title: ${task.title}`, '', task.prompt, '', 'Acceptance criteria:', criteria].join('\n'),
+  );
   // Truncate the data only, so the closing delimiter is always present.
   const room = MAX_PROMPT - head.length - ISSUE_END.length - 2;
   const kept = data.length > room ? `${data.slice(0, Math.max(0, room - 12))}\n[truncated]` : data;
