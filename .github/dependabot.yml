@@ -1,6 +1,5 @@
 version: 2
-# renovate.json is kept, but no Renovate pull request exists in this repository:
-# Dependabot is what opens the update PRs (and pins new action versions by SHA).
+# Dependabot is the only update tool: it opens the update PRs (and pins new action versions by SHA).
 updates:
   - package-ecosystem: npm
     # pnpm workspace: the lockfile at the root covers apps/* and packages/*.

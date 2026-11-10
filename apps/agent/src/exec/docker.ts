@@ -22,8 +22,8 @@ export interface DockerOps {
   pull(image: string): Promise<void>;
   createNetwork(name: string, labels: Record<string, string>): Promise<void>;
   removeNetwork(name: string): Promise<void>;
-  /** `docker create <args>`; `env` is the docker CLI child's environment (secret values). */
-  create(args: string[], env: Record<string, string>): Promise<void>;
+  /** `docker create <args>`. Never given a secret: the container config is readable by `inspect`. */
+  create(args: string[]): Promise<void>;
   /** Copies a host file into the container at the same absolute path (dereferences links). */
   copyIn(container: string, hostFile: string): Promise<void>;
   start(container: string): Promise<void>;
@@ -94,8 +94,8 @@ export class CliDocker implements DockerOps {
     }
   }
 
-  async create(args: string[], env: Record<string, string>): Promise<void> {
-    await this.d(['create', ...args], env);
+  async create(args: string[]): Promise<void> {
+    await this.d(['create', ...args]);
   }
 
   copyIn(container: string, hostFile: string): Promise<void> {

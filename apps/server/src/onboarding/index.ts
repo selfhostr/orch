@@ -149,12 +149,12 @@ export function registerOnboarding(
   const mark =
     (field: 'onboardingCompletedAt' | 'onboardingDismissedAt') => async (req: FastifyRequest) => {
       const user = requireUser(req);
-      if (user[field]) return toApiUser(user, app.allowlist.isAdmin(user.login));
+      if (user[field]) return toApiUser(user, await app.allowlist.isAdmin(user));
       const updated = await deps.prisma.user.update({
         where: { id: user.id },
         data: { [field]: new Date() },
       });
-      return toApiUser(updated, app.allowlist.isAdmin(updated.login));
+      return toApiUser(updated, await app.allowlist.isAdmin(updated));
     };
   app.post('/api/onboarding/complete', mark('onboardingCompletedAt'));
   app.post('/api/onboarding/dismiss', mark('onboardingDismissedAt'));

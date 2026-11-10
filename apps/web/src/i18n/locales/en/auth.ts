@@ -5,6 +5,8 @@ export default {
     rejected: 'Authorization request rejected',
     title: 'Authorize {client}',
     body: "<strong>{client}</strong> (redirect to <code>{host}</code>) wants to use orch's MCP tools (view the pool, list, submit and take tasks) as <strong>{login}</strong>.",
+    redirect:
+      'After approval, your browser and the access code go to <strong>{host}</strong>. Deny if you do not recognize this address.',
     warning: 'Only approve if you just started this from Claude Code.',
     approve: 'Approve',
     deny: 'Deny',

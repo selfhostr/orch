@@ -132,6 +132,7 @@ describe('check container', () => {
     expect(values(args, '--label')).toEqual(
       expect.arrayContaining(['orch.agent=agt_1', `${CHECK_LABEL}=claude-auth`]),
     );
+    expect(args).toContain('--no-healthcheck');
     expect(args).not.toContain('--mount');
     expect(args).not.toContain('-v');
     const env = values(args, '-e');
@@ -143,7 +144,8 @@ describe('check container', () => {
       ]),
     );
     for (const k of BLANKED_AUTH_ENV) expect(env).toContain(`${k}=`);
-    expect(env[env.length - 1]).toBe(CLAUDE_TOKEN_ENV);
+    // Blanked in the container config: only the exec of Claude gets the value.
+    expect(env[env.length - 1]).toBe(`${CLAUDE_TOKEN_ENV}=`);
     expect(args.slice(-4)).toEqual(['--entrypoint', 'sleep', 'node:22-bookworm', 'infinity']);
     expect(() => buildCheckCreateArgs('x', { ...CFG, uid: 0 })).toThrow();
     expect(checkArgv(CFG.claudeBin)).toEqual([
@@ -162,7 +164,7 @@ describe('check container', () => {
   function fakeDocker(result: RunResult | Error) {
     const calls: { op: string; args: unknown[] }[] = [];
     const docker: ClaudeCheckDeps['docker'] = {
-      create: async (args, env) => void calls.push({ op: 'create', args: [args, env] }),
+      create: async (args) => void calls.push({ op: 'create', args: [args] }),
       copyIn: async (c, f) => void calls.push({ op: 'copyIn', args: [c, f] }),
       start: async (c) => void calls.push({ op: 'start', args: [c] }),
       remove: async (c) => void calls.push({ op: 'remove', args: [c] }),
@@ -189,17 +191,20 @@ describe('check container', () => {
     expect(out.payload.errorClass).toBeUndefined();
     expect(out.tokenHash).toBe(hashClaudeToken(TOKEN));
     expect(f.calls.map((c) => c.op)).toEqual(['create', 'copyIn', 'start', 'run', 'remove']);
-    const [createArgs, env] = f.calls[0]!.args as [string[], Record<string, string>];
-    expect(env).toEqual({ [CLAUDE_TOKEN_ENV]: TOKEN });
+    const [createArgs] = f.calls[0]!.args as [string[]];
+    expect(f.calls[0]!.args).toHaveLength(1);
     const name = values(createArgs, '--name')[0];
     expect(f.calls[1]!.args).toEqual([name, CFG.claudeBin]);
     const [, runArgs, opts] = f.calls[3]!.args as [string, string[], RunOptions];
-    expect(runArgs.slice(0, 2)).toEqual(['exec', name]);
+    // The token goes to the exec of Claude only, by name, its value in that child's environment.
+    expect(runArgs.slice(0, 4)).toEqual(['exec', '-e', CLAUDE_TOKEN_ENV, name]);
+    expect(opts.env).toEqual({ [CLAUDE_TOKEN_ENV]: TOKEN });
     expect(opts.timeoutMs).toBe(90_000);
     expect(f.calls[4]!.args).toEqual([name]);
     // The token never appears in any argv.
     for (const c of f.calls) {
-      const argv = c.op === 'create' ? (c.args[0] as string[]) : c.args;
+      const argv =
+        c.op === 'create' ? (c.args[0] as string[]) : c.op === 'run' ? c.args[1] : c.args;
       expect(JSON.stringify(argv)).not.toContain('FAKE');
     }
   });
