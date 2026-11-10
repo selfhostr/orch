@@ -45,6 +45,21 @@ export class FakeGithub implements GithubClient {
     if (!u) throw new Error('bad token');
     return u;
   }
+  /** Current login per GitHub account id (getLoginById); falls back to the signed-in users. */
+  accounts = new Map<number, string | null>();
+  failAccounts = false;
+  /** getLoginById never answers (GitHub hangs). */
+  hangAccounts = false;
+  accountCalls = 0;
+  async getLoginById(githubId: number): Promise<string | null> {
+    this.accountCalls++;
+    if (this.hangAccounts) return new Promise<string | null>(() => {});
+    if (this.failAccounts) throw new Error('github down');
+    if (this.accounts.has(githubId)) return this.accounts.get(githubId) ?? null;
+    let login: string | null = null;
+    for (const u of this.users.values()) if (u.id === githubId) login = u.login;
+    return login;
+  }
   orgs = new Map<string, Set<string>>(); // by access token -> org names (lower-case)
   orgCalls = 0;
   failOrgs = false;

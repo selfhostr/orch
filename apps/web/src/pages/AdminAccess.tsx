@@ -311,14 +311,30 @@ export function AdminAccess() {
             <dl className="config-list">
               {(
                 [
-                  ['admin.configured.logins', d.configured.logins],
-                  ['admin.configured.orgs', d.configured.orgs],
-                  ['admin.configured.admins', d.configured.admins],
+                  ['admin.configured.logins', d.configured.logins, 'ALLOWED'],
+                  ['admin.configured.orgs', d.configured.orgs, null],
+                  ['admin.configured.admins', d.configured.admins, 'ADMIN'],
                 ] as const
-              ).map(([label, items]) => (
+              ).map(([label, items, kind]) => (
                 <Fragment key={label}>
                   <dt>{t(label)}</dt>
-                  <dd>{items.length ? items.join(', ') : t('admin.configured.none')}</dd>
+                  <dd>
+                    {items.length
+                      ? items
+                          .map((login) => {
+                            if (!kind) return login;
+                            const b = d.configured.bindings.find(
+                              (x) => x.kind === kind && x.login === login,
+                            );
+                            return `${login} (${
+                              b
+                                ? t('admin.configured.bound', { id: b.githubUserId })
+                                : t('admin.configured.unbound')
+                            })`;
+                          })
+                          .join(', ')
+                      : t('admin.configured.none')}
+                  </dd>
                 </Fragment>
               ))}
             </dl>
