@@ -108,6 +108,7 @@ export function buildApp({
   if (prisma) {
     configureRepoAccess(github, {
       ttlMs: config.ORCH_REPO_ACCESS_TTL_SEC * 1000,
+      publicTtlMs: config.ORCH_REPO_ACCESS_PUBLIC_TTL_SEC * 1000,
       graceMs: config.ORCH_REPO_ACCESS_GRACE_SEC * 1000,
       retryMs: Math.min(30_000, config.ORCH_REPO_ACCESS_GRACE_SEC * 1000),
       observer: {

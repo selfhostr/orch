@@ -155,6 +155,11 @@ const ConfigSchema = z.object({
   /** How long a user's role on a repository is cached before GitHub is asked again. */
   ORCH_REPO_ACCESS_TTL_SEC: z.coerce.number().int().nonnegative().default(300),
   /**
+   * Same cache for PUBLIC repositories (who may run their tasks): longer, to keep the GitHub
+   * calls of many public projects and members within the installation rate limit.
+   */
+  ORCH_REPO_ACCESS_PUBLIC_TTL_SEC: z.coerce.number().int().nonnegative().default(3600),
+  /**
    * GitHub outage on a private repository: the last verified role is reused if younger than this,
    * then access is denied.
    */

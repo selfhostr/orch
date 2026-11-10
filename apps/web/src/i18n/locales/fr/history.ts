@@ -17,6 +17,7 @@ export default {
     rate_limited: 'Limite de débit',
     timeout: 'Délai dépassé',
     task: 'Tâche échouée',
+    access: 'Pas d’accès en écriture',
   },
   columns: {
     status: 'Statut',

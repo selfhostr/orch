@@ -352,6 +352,29 @@ describe('shut-out counts only task and timeout failures', () => {
   });
 });
 
+describe('access failures', () => {
+  it('a push token refused for lack of write access is an access failure, shown on the task', async () => {
+    const { owner, project: p } = await project();
+    const m = await member(p.id);
+    const t = await createTask(owner, p.id);
+    // What the agent reports when the server refuses its push token (no failureClass sent).
+    const id = await failNth(
+      m,
+      t.id,
+      1,
+      'Token denied by the server: write_access_required (GitHub no longer gives you write access to this repository, so the branch cannot be pushed)',
+    );
+    const a = await prisma.assignment.findUniqueOrThrow({ where: { id } });
+    expect(a.failureClass).toBe('access');
+    const view = (await api(app, owner)('GET', `/api/tasks/${t.id}`)).json() as {
+      lastFailureClass?: string | null;
+      lastError?: string | null;
+    };
+    expect(view.lastFailureClass).toBe('access');
+    expect(view.lastError).toContain('write access');
+  });
+});
+
 describe('claude_auth failures', () => {
   it('flag the agent, exclude it from auto offers, and clear only on a real claude.auth check', async () => {
     const { owner, project: p } = await project();

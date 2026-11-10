@@ -1038,7 +1038,8 @@ export class ManualExecutor {
       outcome: 'failed',
       usage,
       error: message,
-      failureClass,
+      // `access` is newer than some servers: left out, the server classifies the error itself.
+      ...(failureClass !== 'access' ? { failureClass } : {}),
       ...(rateLimitedUntil ? { rateLimitedUntil } : {}),
     });
     await this.teardown(rec);

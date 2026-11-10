@@ -661,15 +661,25 @@ export class Dispatcher {
       taskReasons.push(block('no_member', 'Nobody participates in this project yet'));
     }
     // Tasks only run for members with write access: say so when no participant has it.
+    // Counted among the members who could receive it: active participation, not paused, a
+    // connected machine that is not paused (a paused writer must not hide the explanation).
     if (snap && members.length > 0) {
+      let receivers = 0;
       let writer = false;
       for (const p of snap.participantsOf(task.projectId)) {
+        if (participationStatus(p, task.project.requireParticipantApproval) !== 'active') continue;
+        if (p.user.paused) continue;
+        const ready = p.user.agents.some(
+          (a) => !a.revokedAt && !a.paused && this.gateway.isConnected(a.id),
+        );
+        if (!ready) continue;
+        receivers++;
         if (await this.repoAllowed(snap, task, p.user)) {
           writer = true;
           break;
         }
       }
-      if (!writer) {
+      if (receivers > 0 && !writer) {
         taskReasons.push(
           block(
             'no_writer',

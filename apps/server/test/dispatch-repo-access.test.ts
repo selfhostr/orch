@@ -164,6 +164,8 @@ describe('dispatcher: private repository access', () => {
         );
         expect(reasonOf(members, w.collabId)).toBe('access_denied');
         expect(reasonOf(members, w.removedId)).toBe('access_denied');
+        // The repository owner, as GitHub reports them (ADMIN, set without giveRole), runs.
+        expect(reasonOf(members, w.ownerId)).not.toBe('access_denied');
       }
       w.gh.roles.set(w.key(w.collabId), 'MAINTAIN');
       await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: w.collabId });
@@ -188,6 +190,13 @@ describe('dispatcher: private repository access', () => {
       await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: id });
     }
     expect(await codes()).toContain('no_writer');
+    // A writer who is paused cannot receive it: the explanation stays.
+    w.gh.roles.set(w.key(w.collabId), 'WRITE');
+    await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: w.collabId });
+    await prisma.user.update({ where: { id: w.collabId }, data: { paused: true } });
+    expect(await codes()).toContain('no_writer');
+    await prisma.user.update({ where: { id: w.collabId }, data: { paused: false } });
+    expect(await codes()).not.toContain('no_writer');
   });
 
   it('accept() refuses an offer still open once GitHub denies, and closes it', async () => {
@@ -330,6 +339,8 @@ describe('role cache hardening', () => {
   it('public repository: an outage gets the grace, then denies, without asking GitHub every tick', async () => {
     const w = await world(14);
     await prisma.project.update({ where: { id: w.project.id }, data: { isPrivate: false } });
+    // Same windows as a private repository here (public roles are cached 1 h by default).
+    configureRepoAccess(w.gh, { publicTtlMs: 5 * 60_000 });
     const project = { ...w.project, isPrivate: false };
     const who = { id: w.collabId, login: w.users.find((u) => u.id === w.collabId)!.login };
     expect((await getRoleInfo(prisma, w.gh, project, who)).role).toBe('WRITE');
@@ -355,6 +366,23 @@ describe('role cache hardening', () => {
     expect(w.gh.roleCalls).toBe(before + 2);
     w.gh.failRoles = false;
     expect((await getRoleInfo(prisma, w.gh, project, who)).role).toBe('WRITE');
+  });
+
+  it('public roles are cached longer: no GitHub call within the public cache', async () => {
+    const w = await world(16);
+    await prisma.project.update({ where: { id: w.project.id }, data: { isPrivate: false } });
+    const project = { ...w.project, isPrivate: false };
+    const who = { id: w.collabId, login: w.users.find((u) => u.id === w.collabId)!.login };
+    expect((await getRoleInfo(prisma, w.gh, project, who)).role).toBe('WRITE');
+    await prisma.projectPermission.updateMany({
+      where: { userId: w.collabId, projectId: w.project.id },
+      data: { syncedAt: new Date(Date.now() - 30 * 60_000) },
+    });
+    const before = w.gh.roleCalls;
+    expect((await getRoleInfo(prisma, w.gh, project, who)).role).toBe('WRITE');
+    expect(w.gh.roleCalls).toBe(before); // 30 min old: still cached for a public repository
+    expect((await getRoleInfo(prisma, w.gh, w.project, who)).role).toBe('WRITE');
+    expect(w.gh.roleCalls).toBe(before + 1); // private: the 5 min cache expired
   });
 
   it('concurrent checks share one GitHub call', async () => {

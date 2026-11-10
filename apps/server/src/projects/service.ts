@@ -6,6 +6,16 @@ import { canParticipate, canPush } from './roles';
 
 export const ROLE_CACHE_TTL_MS = 5 * 60 * 1000;
 export const DEFAULT_GRACE_MS = 15 * 60 * 1000;
+export const PUBLIC_ROLE_CACHE_TTL_MS = 60 * 60 * 1000;
+
+/** Cache and outage windows of a project's role: the grace starts when the cache expires. */
+function windowsOf(state: RepoAccessSettings, project: { isPrivate: boolean }) {
+  const ttl = project.isPrivate ? state.ttlMs : state.publicTtlMs;
+  // The grace counts from the last verification: a public role cached longer keeps the same
+  // margin after its cache expired as a private one.
+  const grace = project.isPrivate ? state.graceMs : state.publicTtlMs - state.ttlMs + state.graceMs;
+  return { ttl, grace: Math.max(grace, state.graceMs) };
+}
 
 export function toProjectView(p: Project): ProjectView {
   return {
@@ -158,6 +168,11 @@ export interface RepoAccessObserver {
 
 interface RepoAccessSettings {
   ttlMs: number;
+  /**
+   * Cache of a PUBLIC repository's role. Longer than `ttlMs`: every participant of every public
+   * project is checked, and collaborator webhooks (member added, removed, edited) end it early.
+   */
+  publicTtlMs: number;
   graceMs: number;
   /** After a failed refresh, GitHub is not asked again for that pair for this long. */
   retryMs: number;
@@ -173,6 +188,7 @@ interface RepoAccessState extends RepoAccessSettings {
 
 const newState = (): RepoAccessState => ({
   ttlMs: ROLE_CACHE_TTL_MS,
+  publicTtlMs: PUBLIC_ROLE_CACHE_TTL_MS,
   graceMs: DEFAULT_GRACE_MS,
   retryMs: 30_000,
   inflight: new Map(),
@@ -312,12 +328,13 @@ async function lookupRole(
     canParticipate: cached?.canParticipate ?? null,
   });
   const age = cached ? Date.now() - cached.syncedAt.getTime() : Infinity;
-  if (cached && age < state.ttlMs) return info(cached.githubRole);
+  const { ttl, grace } = windowsOf(state, project);
+  if (cached && age < ttl) return info(cached.githubRole);
   if (!github) return info(cached?.githubRole ?? 'NONE');
   const key = pairKey(project.id, user.id);
   const failed = state.failedAt.get(key);
   if (failed !== undefined && Date.now() - failed < state.retryMs) {
-    return info(outageRole(state, cached, age));
+    return info(cached && age < grace ? cached.githubRole : 'NONE');
   }
   let refresh = state.inflight.get(key);
   if (!refresh) {
@@ -329,15 +346,6 @@ async function lookupRole(
     refresh.then(done, done);
   }
   return info(await refresh);
-}
-
-/** GitHub cannot answer: the last verified role while younger than the grace, else NONE. */
-function outageRole(
-  state: RepoAccessState,
-  cached: ProjectPermission | null,
-  age: number,
-): GithubRole {
-  return cached && age < state.graceMs ? cached.githubRole : 'NONE';
 }
 
 async function refreshRole(
@@ -381,7 +389,7 @@ async function refreshRole(
       return 'NONE';
     }
     state.failedAt.set(pairKey(project.id, user.id), Date.now());
-    if (cached && age < state.graceMs) {
+    if (cached && age < windowsOf(state, project).grace) {
       state.observer?.count('grace');
       state.observer?.warn(
         { projectId: project.id, userId: user.id, status, ageSec: Math.round(age / 1000) },
