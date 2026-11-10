@@ -18,7 +18,7 @@ import {
 } from '@orch/shared';
 import { sha256Hex } from '../src/auth/crypto';
 import { OfferRefusedError } from '../src/agents';
-import { purgeRetention, recordUsage } from '../src/usage';
+import { MessageSeenGoneError, purgeRetention, recordUsage } from '../src/usage';
 import { FakeGithub, api, loginAs, makeApp, prisma, type TestUser } from './harness';
 
 const FAST = {
@@ -481,7 +481,28 @@ describe('agent websocket protocol', () => {
       data: { agentId, messageId, seenAt: new Date(Date.now() - 10 * 60_000) },
     });
     const gateway = app.agentGateway as unknown as {
+      deps: { prisma: typeof prisma };
       ackDuplicate(c: unknown, id: string): Promise<boolean>;
+    };
+    // Barrier on the read: both takeovers read the stale row before either one writes.
+    const real = gateway.deps;
+    let arrived = 0;
+    let open!: () => void;
+    const both = new Promise<void>((r) => (open = r));
+    gateway.deps = {
+      ...real,
+      prisma: {
+        agentMessageSeen: {
+          findUnique: async (args: Parameters<typeof prisma.agentMessageSeen.findUnique>[0]) => {
+            const row = await real.prisma.agentMessageSeen.findUnique(args);
+            if (++arrived === 2) open();
+            await both;
+            return row;
+          },
+          updateMany: (args: Parameters<typeof prisma.agentMessageSeen.updateMany>[0]) =>
+            real.prisma.agentMessageSeen.updateMany(args),
+        },
+      } as unknown as typeof prisma,
     };
     const conn = (n: number) => ({
       agentId,
@@ -489,11 +510,26 @@ describe('agent websocket protocol', () => {
       socket: { readyState: 1, OPEN: 1, send: () => undefined },
       n,
     });
-    const won = await Promise.all([
-      gateway.ackDuplicate(conn(1), messageId),
-      gateway.ackDuplicate(conn(2), messageId),
-    ]);
-    expect(won.filter(Boolean)).toHaveLength(1);
+    try {
+      const won = await Promise.all([
+        gateway.ackDuplicate(conn(1), messageId),
+        gateway.ackDuplicate(conn(2), messageId),
+      ]);
+      expect(arrived).toBe(2);
+      expect(won.filter(Boolean)).toHaveLength(1);
+    } finally {
+      gateway.deps = real;
+    }
+    client.close();
+  });
+
+  it('a usage report whose dedupe row is gone is an error, not stored and not acked', async () => {
+    const { agentId, user, client } = await onlineAgent();
+    const who = { id: agentId, userId: user.userId };
+    await expect(recordUsage(prisma, who, usage(), new Date(), 'row-gone')).rejects.toBeInstanceOf(
+      MessageSeenGoneError,
+    );
+    expect(await prisma.usageReport.count({ where: { agentId } })).toBe(0);
     client.close();
   });
 

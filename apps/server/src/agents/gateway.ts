@@ -744,15 +744,16 @@ export class AgentGateway {
 
   /**
    * Replays the first answer. Still being processed: no ack, the agent outbox resends later.
-   * A row without a stored ack long after it was seen means the process died mid-way: the resend
-   * takes the row over and the message is processed again. Returns true when the caller must
-   * process it. Only one of two concurrent resends wins the takeover.
+   * A row without a stored ack long after it was seen means the first processing died mid-way, or
+   * is only slow and still running (a slow GitHub call): either way the resend takes the row over
+   * and the message is processed again, possibly while the first one finishes. Returns true when
+   * the caller must process it. Only one of two concurrent resends wins the takeover.
    *
    * Processing again changes no state twice: progress messages are guarded by `lastSeq` and the
    * assignment status, `offer.accept` replays, `usage.report` writes its ack with the report,
    * `pause.set`, `claude.auth` and `update.status` set values, and a replayed `task.claim` or
    * `offer.reject` is refused. Audit rows are not deduplicated: `pause.set`, `update.status` and
-   * `done.request` may log their event twice after a crash.
+   * `done.request` may log their event twice after a crash or a takeover.
    */
   private async ackDuplicate(c: Conn, messageId: string): Promise<boolean> {
     const { prisma } = this.deps;

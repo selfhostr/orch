@@ -20,6 +20,13 @@ export function claudeAuthUpdate(
   return { claudeAuthValid: false, claudeAuthInvalidAt: new Date() };
 }
 
+/** The dedupe row of the message being processed no longer exists (see recordUsage). */
+export class MessageSeenGoneError extends Error {
+  constructor(messageId: string) {
+    super(`Dedupe row of message ${messageId} is gone`);
+  }
+}
+
 /**
  * Stores one usage report and bumps Agent.lastUsageAt. With `messageId` (an acked agent message),
  * its dedupe row gets its ack in the same transaction, and nothing is stored when it already has
@@ -56,7 +63,16 @@ export async function recordUsage(
         where: { agentId: agent.id, messageId, ack: { equals: Prisma.DbNull } },
         data: { ack: { ok: true } },
       });
-      if (acked.count !== 1) return false;
+      if (acked.count !== 1) {
+        const row = await tx.agentMessageSeen.findUnique({
+          where: { agentId_messageId: { agentId: agent.id, messageId } },
+          select: { agentId: true },
+        });
+        // Acked by another processing: stored already. Row gone (removed after a failed
+        // processing): an error, so that no ack is sent and the agent sends the report again.
+        if (row) return false;
+        throw new MessageSeenGoneError(messageId);
+      }
     }
     await tx.usageReport.create({
       data: {
