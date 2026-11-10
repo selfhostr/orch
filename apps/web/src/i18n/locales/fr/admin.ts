@@ -57,6 +57,8 @@ export default {
     logins: 'Logins',
     orgs: 'Organisations',
     admins: 'Administrateurs',
+    bound: 'compte GitHub {id}',
+    unbound: 'pas encore rattaché, la première connexion avec ce login le rattache',
     none: 'aucun',
   },
   declined: 'Refusés ({count})',

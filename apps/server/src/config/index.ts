@@ -43,6 +43,38 @@ const ConfigSchema = z.object({
       .transform((v): boolean | string => (v === 'true' ? true : v === 'false' ? false : v)),
   ),
   /**
+   * Hosts an MCP OAuth client may use as an https redirect_uri (comma-separated host names,
+   * optionally with `:port`, compared exactly: no wildcard, no suffix match). Loopback http
+   * (127.0.0.1, [::1], localhost, any port) is always accepted, as RFC 8252 asks. The default
+   * keeps the Claude web connectors working; `none` allows no https host (loopback only). `:443`
+   * is dropped, as URLs carry no default port.
+   */
+  ORCH_OAUTH_REDIRECT_HOSTS: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .default('claude.ai,claude.com')
+      .transform((v) =>
+        v.trim().toLowerCase() === 'none'
+          ? []
+          : v
+              .split(',')
+              .map((s) => s.trim().toLowerCase().replace(/:443$/, ''))
+              .filter(Boolean),
+      )
+      .pipe(
+        z.array(
+          z
+            .string()
+            .max(260)
+            .regex(
+              /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*(?::[1-9][0-9]{0,4})?$/,
+              'host names only (example: claude.ai or app.example.org:8443), no scheme, path or wildcard',
+            ),
+        ),
+      ),
+  ),
+  /**
    * Rate limiting (auth and agent-connect counted in Postgres, the other tiers per instance).
    * Limits are per window (RATE_LIMIT_WINDOW_SEC): API per signed-in user (else per IP), auth/OAuth per IP, webhook per IP, MCP per token,
    * expensive reads per user. 0 on a *_MAX value is not allowed; set RATE_LIMIT_ENABLED=false
