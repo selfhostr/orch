@@ -14,6 +14,7 @@ import {
 import { selectDevEnv } from '../../src/exec/devcontainer';
 import { CliDocker } from '../../src/exec/docker';
 import { spawnRunner } from '../../src/exec/runner';
+import { STOP_PREPARATION_SCRIPT, buildCreateArgs } from '../../src/exec/sandbox';
 import { tempDir } from '../helpers/util';
 import { BOT_REPO_FILES } from './compose-fixtures';
 
@@ -98,6 +99,81 @@ describe.skipIf(!enabled)('docker integration (ORCH_DOCKER_IT=1)', () => {
     } finally {
       await docker.composeDown(project).catch(() => undefined);
       await docker.removeNetwork(network).catch(() => undefined);
+      tmp.cleanup();
+    }
+  }, 600_000);
+
+  it('stops what the preparation left running, keeps docker-init and the keep-alive', async () => {
+    const tmp = tempDir();
+    const docker = new CliDocker(spawnRunner);
+    const id = `it-stop-${process.pid}`;
+    const tag = `orch-task-${id}:latest`;
+    const name = `orch-task-${id}`;
+    const ctx = join(tmp.dir, 'ctx');
+    mkdirSync(join(tmp.dir, 'src'), { recursive: true });
+    mkdirSync(ctx, { recursive: true });
+    // An image with a HEALTHCHECK: it must not run in a task container.
+    writeFileSync(
+      join(ctx, 'Dockerfile'),
+      `FROM ${process.env.ORCH_IT_IMAGE ?? 'node:22-bookworm'}\nHEALTHCHECK --interval=1s CMD touch /tmp/hc\n`,
+    );
+    try {
+      await docker.build({
+        tag,
+        dockerfile: join(ctx, 'Dockerfile'),
+        context: ctx,
+        args: {},
+        labels: {},
+      });
+      await docker.create(
+        buildCreateArgs({
+          name,
+          image: tag,
+          clonePath: join(tmp.dir, 'src'),
+          workspaceFolder: '/workspace',
+          uid: 1000,
+          gid: 1000,
+          network: 'none',
+          size: 'S',
+          labels: {},
+          containerEnv: {},
+        }),
+      );
+      await docker.start(name);
+      const hc = await spawnRunner.run('docker', [
+        'inspect',
+        '-f',
+        '{{json .Config.Healthcheck.Test}}',
+        name,
+      ]);
+      expect(hc.stdout.trim()).toBe('["NONE"]');
+      // What a postCreateCommand can leave behind: nohup'd, signal-ignoring, own session, respawning.
+      const prep = await docker.exec(name, [
+        'sh',
+        '-c',
+        'nohup sh -c \'trap "" TERM HUP; while :; do sleep 1; done\' >/dev/null 2>&1 &\n' +
+          "setsid sh -c 'while :; do sleep 1 & sleep 0.2; done' >/dev/null 2>&1 </dev/null &\n" +
+          'exit 0',
+      ]);
+      expect(prep.code).toBe(0);
+      const list = ['sh', '-c', 'for d in /proc/[0-9]*; do tr "\\0" " " <$d/cmdline; echo; done'];
+      const before = await docker.exec(name, list);
+      expect(before.stdout).toContain('while :');
+      const stop = await docker.exec(name, ['sh', '-c', STOP_PREPARATION_SCRIPT]);
+      expect(stop.code).toBe(0);
+      const after = await docker.exec(name, list);
+      const procs = after.stdout
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l !== '' && !l.startsWith('sh -c for d in'));
+      expect(procs.sort()).toEqual(['/sbin/docker-init -- sleep infinity', 'sleep infinity']);
+      expect(await docker.isRunning(name)).toBe(true);
+      // The container holds no token value.
+      const tok = await docker.exec(name, ['sh', '-c', 'printf %s "$CLAUDE_CODE_OAUTH_TOKEN"']);
+      expect(tok.stdout).toBe('');
+    } finally {
+      await docker.remove(name).catch(() => undefined);
+      await docker.removeImage(tag).catch(() => undefined);
       tmp.cleanup();
     }
   }, 600_000);

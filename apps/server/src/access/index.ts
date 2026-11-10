@@ -16,6 +16,7 @@ import {
   grantView,
   inviteIsActive,
   inviteView,
+  releaseGrantLogin,
 } from './core';
 import {
   NOTE_MAX,
@@ -35,7 +36,8 @@ const InviteSchema = z.object({
 
 /**
  * Access management: the request-access form (no session), invite links and the admin API
- * behind the Access page (/admin/access). Admins come from ORCH_ADMIN_GITHUB_LOGINS.
+ * behind the Access page (/admin/access). Admins come from ORCH_ADMIN_GITHUB_LOGINS, bound to
+ * the GitHub account id of their first sign-in.
  */
 export function registerAccess(app: FastifyInstance, deps: AuthDeps): void {
   const { config, prisma } = deps;
@@ -51,9 +53,9 @@ export function registerAccess(app: FastifyInstance, deps: AuthDeps): void {
   const html = (reply: FastifyReply, status: number, body: string) =>
     reply.status(status).type('text/html; charset=utf-8').send(body);
 
-  function requireAdmin(req: FastifyRequest): User {
+  async function requireAdmin(req: FastifyRequest): Promise<User> {
     const user = requireUser(req);
-    if (!app.allowlist.isAdmin(user.login)) {
+    if (!(await app.allowlist.isAdmin(user))) {
       throw new HttpError(403, 'forbidden', 'Admins only');
     }
     return user;
@@ -87,8 +89,16 @@ export function registerAccess(app: FastifyInstance, deps: AuthDeps): void {
       const rawNote = typeof b.note === 'string' ? b.note.trim().slice(0, NOTE_MAX) : '';
       const note = rawNote || null;
 
+      if (githubUserId !== null) await releaseGrantLogin(prisma, githubLogin, githubUserId);
       const existing = await prisma.accessGrant.findUnique({ where: { githubLogin } });
       if (existing?.status === 'DENIED') return html(reply, 403, declinedPage(login, avatarUrl));
+      // Declined under another login (renamed account): still declined.
+      if (
+        githubUserId !== null &&
+        (await app.allowlist.grantFor(login, githubUserId))?.status === 'DENIED'
+      ) {
+        return html(reply, 403, declinedPage(login, avatarUrl));
+      }
       if (existing?.status === 'APPROVED') return html(reply, 200, alreadyApprovedPage(login));
       let grantId: string;
       if (existing) {
@@ -150,7 +160,7 @@ export function registerAccess(app: FastifyInstance, deps: AuthDeps): void {
   // ---------- admin API ----------
 
   app.get('/api/admin/access', async (req) => {
-    requireAdmin(req);
+    await requireAdmin(req);
     const [grants, invites] = await Promise.all([
       prisma.accessGrant.findMany({ orderBy: [{ updatedAt: 'desc' }] }),
       prisma.accessInvite.findMany({ orderBy: { createdAt: 'desc' }, take: 200 }),
@@ -166,17 +176,19 @@ export function registerAccess(app: FastifyInstance, deps: AuthDeps): void {
         orgs: config.ORCH_ALLOWED_GITHUB_ORGS,
         admins: config.ORCH_ADMIN_GITHUB_LOGINS,
         allowAny: config.ORCH_ALLOW_ANY_GITHUB_USER,
+        // Which GitHub account each listed login is bound to (first sign-in wins).
+        bindings: await app.allowlist.bindingsView(),
       },
     };
   });
 
   app.get('/api/admin/access/pending-count', async (req) => {
-    requireAdmin(req);
+    await requireAdmin(req);
     return { count: await prisma.accessGrant.count({ where: { status: 'PENDING' } }) };
   });
 
   app.post('/api/admin/access/grants', async (req) => {
-    const admin = requireAdmin(req);
+    const admin = await requireAdmin(req);
     const githubLogin = parseBody(PreapproveSchema, req.body).githubLogin.toLowerCase();
     const decided = { status: 'APPROVED' as const, decidedAt: new Date(), decidedBy: admin.login };
     const grant = await prisma.accessGrant.upsert({
@@ -196,7 +208,7 @@ export function registerAccess(app: FastifyInstance, deps: AuthDeps): void {
 
   const decide = (path: string, status: 'APPROVED' | 'DENIED', action: string) =>
     app.post(path, async (req) => {
-      const admin = requireAdmin(req);
+      const admin = await requireAdmin(req);
       const { id } = req.params as { id: string };
       const found = await prisma.accessGrant.findUnique({ where: { id } });
       if (!found) throw new HttpError(404, 'not_found', 'Access grant not found');
@@ -209,7 +221,12 @@ export function registerAccess(app: FastifyInstance, deps: AuthDeps): void {
       if (status === 'DENIED') {
         // Connected agents of that user are suspended now, not at their next frame.
         const users = await prisma.user.findMany({
-          where: { login: { equals: grant.githubLogin, mode: 'insensitive' } },
+          where: {
+            OR: [
+              { login: { equals: grant.githubLogin, mode: 'insensitive' } },
+              ...(grant.githubUserId === null ? [] : [{ githubId: grant.githubUserId }]),
+            ],
+          },
           select: { id: true },
         });
         for (const u of users) await app.agentGateway.recheckUser(u.id);
@@ -227,7 +244,7 @@ export function registerAccess(app: FastifyInstance, deps: AuthDeps): void {
   decide('/api/admin/access/grants/:id/remove', 'DENIED', 'access.removed');
 
   app.post('/api/admin/access/invites', async (req) => {
-    const admin = requireAdmin(req);
+    const admin = await requireAdmin(req);
     const b = parseBody(InviteSchema, req.body);
     const token = randomToken();
     const invite = await prisma.accessInvite.create({
@@ -249,7 +266,7 @@ export function registerAccess(app: FastifyInstance, deps: AuthDeps): void {
   });
 
   app.post('/api/admin/access/invites/:id/revoke', async (req) => {
-    const admin = requireAdmin(req);
+    const admin = await requireAdmin(req);
     const { id } = req.params as { id: string };
     const found = await prisma.accessInvite.findUnique({ where: { id } });
     if (!found) throw new HttpError(404, 'not_found', 'Invite not found');

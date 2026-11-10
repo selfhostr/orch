@@ -20,7 +20,7 @@ import {
 import { audit } from '../audit';
 import type { Config } from '../config';
 import type { PrismaClient } from '../db';
-import type { GithubClient, GithubIssue } from '../github';
+import { PullRequestExistsError, type GithubClient, type GithubIssue } from '../github';
 import { HttpError } from '../http/errors';
 import { canSubmit as roleCanSubmit, toOrchRole } from '../projects/roles';
 import {
@@ -78,6 +78,11 @@ export interface Access {
 /** Task statuses that count as "pending" for the per-creator limit. */
 export const PENDING_STATUSES: TaskStatus[] = ['PROPOSED', 'TODO'];
 const LIVE_ASSIGNMENT = ['ACCEPTED', 'RUNNING', 'PUSHED'] as const;
+
+/** Comment left on a pull request closed because its run was lost before it was recorded. */
+const ORPHAN_PR_COMMENT =
+  'Closed by orch: the run that opened this pull request was declared lost (its lease ended) ' +
+  'before the pull request was recorded, and the task went back to the pool. Another run replaces it.';
 const EDITABLE: TaskStatus[] = ['PROPOSED', 'TODO'];
 
 const toTaskUser = (u: User): TaskUser => ({
@@ -1437,6 +1442,16 @@ export class TaskService {
     return { a, err: null };
   }
 
+  /** A guarded progress write found the assignment changed since it was read: answer from now. */
+  private async changedMeanwhile(
+    agent: AgentWithUser,
+    assignmentId: string,
+    seq: number,
+  ): Promise<AckPayload> {
+    const t = await this.progressTarget(agent, assignmentId, seq);
+    return t.err ?? refuse('assignment_changed', 'The assignment changed meanwhile');
+  }
+
   private agentAudit(
     agent: AgentWithUser,
     action: string,
@@ -1463,13 +1478,15 @@ export class TaskService {
     if (t.a === null) return t.err;
     const a = t.a;
     const first = a.status === 'ACCEPTED';
-    await this.prisma.assignment.update({
-      where: { id: a.id },
+    // Guarded: a run lost meanwhile (lease lapsed, see the dispatcher) is not written over.
+    const r = await this.prisma.assignment.updateMany({
+      where: { id: a.id, status: a.status, lastSeq: { lt: p.seq } },
       data: {
         lastSeq: p.seq,
         ...(first ? { status: 'RUNNING', startedAt: new Date() } : {}),
       },
     });
+    if (r.count !== 1) return this.changedMeanwhile(agent, p.assignmentId, p.seq);
     if (first) await this.agentAudit(agent, 'task.started', a);
     await this.agentAudit(agent, 'task.status', a, {
       state: p.state,
@@ -1498,7 +1515,11 @@ export class TaskService {
     const task = a.task;
     if (task.prNumber && task.prUrl) {
       // Already opened (e.g. a re-push): tell the agent again, nothing to create.
-      await this.prisma.assignment.update({ where: { id: a.id }, data: { lastSeq: p.seq } });
+      const r = await this.prisma.assignment.updateMany({
+        where: { id: a.id, status: { in: [...LIVE_ASSIGNMENT] }, lastSeq: { lt: p.seq } },
+        data: { lastSeq: p.seq },
+      });
+      if (r.count !== 1) return { ack: await this.changedMeanwhile(agent, p.assignmentId, p.seq) };
       return {
         ack: { ok: true },
         prOpened: { assignmentId: a.id, prNumber: task.prNumber, prUrl: task.prUrl },
@@ -1511,27 +1532,63 @@ export class TaskService {
       return { ack: refuse('github_not_configured', 'GitHub is not configured') };
     const creator = await this.prisma.user.findUniqueOrThrow({ where: { id: task.createdById } });
     const draft = a.execMode === 'AUTO';
-    const pr = await this.deps.github.createPullRequest(
-      Number(task.project.installation.githubInstallationId),
-      task.project.fullName,
-      {
+    const github = this.deps.github;
+    const installationId = Number(task.project.installation.githubInstallationId);
+    const fullName = task.project.fullName;
+    const base = task.integrationBranch ?? task.baseBranch;
+    let created = true;
+    const pr = await github
+      .createPullRequest(installationId, fullName, {
         head: p.branch,
-        base: task.integrationBranch ?? task.baseBranch,
+        base,
         title: task.title,
         body: buildPrBody(task, creator.login, agent.user.login, a.execMode ?? 'MANUAL', p),
         draft,
-      },
-    );
-    await this.prisma.$transaction([
-      this.prisma.task.update({
+      })
+      .catch(async (err: unknown) => {
+        // Opened by an earlier delivery of this message whose write below failed: reuse it.
+        if (!(err instanceof PullRequestExistsError)) throw err;
+        const open = await github.findOpenPullRequest(installationId, fullName, p.branch, base);
+        if (!open) throw err;
+        created = false;
+        return open;
+      });
+    // Guarded like the other progress writes: a run lost meanwhile stays lost, and its task
+    // (back in the pool, maybe taken again) does not go to IN_REVIEW.
+    const recorded = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.assignment.updateMany({
+        where: { id: a.id, status: { in: [...LIVE_ASSIGNMENT] }, lastSeq: { lt: p.seq } },
+        data: { status: 'PUSHED', lastSeq: p.seq },
+      });
+      if (r.count !== 1) return false;
+      await tx.task.update({
         where: { id: task.id },
         data: { status: 'IN_REVIEW', prNumber: pr.number, prUrl: pr.htmlUrl, headSha: p.headSha },
-      }),
-      this.prisma.assignment.update({
-        where: { id: a.id },
-        data: { status: 'PUSHED', lastSeq: p.seq },
-      }),
-    ]);
+      });
+      return true;
+    });
+    if (!recorded) {
+      // Another processing of the same message (a slow first one taken over, see the gateway) may
+      // have reused this pull request and recorded it: then it is the run's PR, not an orphan.
+      const [nowTask, nowAssignment] = await Promise.all([
+        this.prisma.task.findUnique({ where: { id: task.id }, select: { prNumber: true } }),
+        this.prisma.assignment.findUnique({ where: { id: a.id }, select: { status: true } }),
+      ]);
+      const owned = nowTask?.prNumber === pr.number || nowAssignment?.status === 'PUSHED';
+      if (!owned) {
+        // The run was lost meanwhile (the task went back to the pool): the pull request just
+        // opened for it belongs to nothing. One reused from an earlier delivery is left as it is.
+        let closed = false;
+        if (created) {
+          closed = await github
+            .closePullRequest(installationId, fullName, pr.number, ORPHAN_PR_COMMENT)
+            .then(() => true)
+            .catch(() => false);
+        }
+        await this.agentAudit(agent, 'task.pr_orphaned', a, { prNumber: pr.number, closed });
+      }
+      return { ack: await this.changedMeanwhile(agent, p.assignmentId, p.seq) };
+    }
     await this.agentAudit(agent, 'task.pushed', a, {
       branch: p.branch,
       headSha: p.headSha,
@@ -1573,9 +1630,10 @@ export class TaskService {
           ? 'task'
           : (p.failureClass ?? classifyFailure(p.error));
     const now = new Date();
-    const [, returned] = await this.prisma.$transaction([
-      this.prisma.assignment.update({
-        where: { id: a.id },
+    const returned = await this.prisma.$transaction(async (tx) => {
+      // Guarded: a run lost meanwhile (lease lapsed) is not rewritten as finished.
+      const r = await tx.assignment.updateMany({
+        where: { id: a.id, status: { in: [...LIVE_ASSIGNMENT] }, lastSeq: { lt: p.seq } },
         data: {
           status,
           lastSeq: p.seq,
@@ -1586,14 +1644,16 @@ export class TaskService {
           failureClass,
           usageWeighted: BigInt(Math.round(p.usage.weighted)),
         },
-      }),
+      });
+      if (r.count !== 1) return null;
       // Without a PR nothing was delivered: the task goes back to the pool. Only while this run
       // still holds it: a task already IN_REVIEW or DONE (PR opened or merged meanwhile) stays.
-      this.prisma.task.updateMany({
+      return tx.task.updateMany({
         where: { id: a.taskId, status: 'IN_PROGRESS', assigneeAgentId: agent.id },
         data: { status: 'TODO', assigneeId: null, assigneeAgentId: null },
-      }),
-    ]);
+      });
+    });
+    if (!returned) return this.changedMeanwhile(agent, p.assignmentId, p.seq);
     await this.agentAudit(agent, 'task.finished', a, {
       outcome: p.outcome,
       weighted: p.usage.weighted,

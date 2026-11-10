@@ -100,6 +100,8 @@ On the member machine the agent keeps a bare **mirror** of each repository and m
 
 The task image comes from the repository's `Dockerfile` or a simple `.devcontainer.json`, otherwise a default image (`ORCH_DEFAULT_IMAGE`). In auto mode the agent runs `claude -p --permission-mode bypassPermissions` inside the container and the PR is opened as a **draft**. In manual mode (`orch take`) it starts an interactive Claude session in a `screen` and you finish with `orch done`.
 
+The image's `ENTRYPOINT`, `CMD` and `HEALTHCHECK` are not run. The devcontainer's `postCreateCommand` runs once, before Claude, and every process it leaves running (a database or dev server started in the background, for example) is stopped before Claude starts, so Claude's environment, which holds your Claude token, cannot be read by them. A service the task needs must be started by Claude itself or by the project's own scripts during the task, or run as a sidecar from the repository's `compose.yaml`.
+
 ### The compose guard
 
 When a task uses the repository's own `compose.yaml` for its sidecars, the agent validates it before starting anything, with allowlists of keys and values on the fully resolved model: host bind mounts, the Docker socket, host or foreign namespaces and networks, privileges, devices, extra capabilities, out-of-repository builds, secrets and includes are refused with an error naming the key. It then runs a hardened copy: no published ports, all capabilities dropped but a harmless baseline, `no-new-privileges`, and capped memory, CPU and pids. The full list is in {ref}`compose-guard`.

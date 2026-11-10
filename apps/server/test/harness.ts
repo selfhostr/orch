@@ -13,6 +13,7 @@ import type {
   GithubUserInfo,
   InstallationTokenScope,
 } from '../src/github';
+import { PullRequestExistsError } from '../src/github';
 import { testPrisma } from './db';
 
 let seq = 0;
@@ -44,6 +45,21 @@ export class FakeGithub implements GithubClient {
     const u = this.users.get(accessToken);
     if (!u) throw new Error('bad token');
     return u;
+  }
+  /** Current login per GitHub account id (getLoginById); falls back to the signed-in users. */
+  accounts = new Map<number, string | null>();
+  failAccounts = false;
+  /** getLoginById never answers (GitHub hangs). */
+  hangAccounts = false;
+  accountCalls = 0;
+  async getLoginById(githubId: number): Promise<string | null> {
+    this.accountCalls++;
+    if (this.hangAccounts) return new Promise<string | null>(() => {});
+    if (this.failAccounts) throw new Error('github down');
+    if (this.accounts.has(githubId)) return this.accounts.get(githubId) ?? null;
+    let login: string | null = null;
+    for (const u of this.users.values()) if (u.id === githubId) login = u.login;
+    return login;
   }
   orgs = new Map<string, Set<string>>(); // by access token -> org names (lower-case)
   orgCalls = 0;
@@ -121,14 +137,52 @@ export class FakeGithub implements GithubClient {
       expiresAt: new Date(Date.now() + 3600_000),
     };
   }
+  /** Like GitHub: a second open pull request for the same head and base is refused. */
+  rejectDuplicatePullRequests = false;
+  closedPullRequests: Array<{ fullName: string; number: number; comment: string }> = [];
   async createPullRequest(
     _installationId: number,
     fullName: string,
     input: CreatePullRequestInput,
   ) {
+    if (
+      this.rejectDuplicatePullRequests &&
+      this.pullRequests.some(
+        (p) =>
+          p.fullName === fullName &&
+          p.head === input.head &&
+          p.base === input.base &&
+          !this.isClosed(fullName, p.number),
+      )
+    ) {
+      throw new PullRequestExistsError();
+    }
     const number = this.pullRequests.length + 100;
     this.pullRequests.push({ ...input, fullName, number });
     return { number, htmlUrl: `https://github.com/${fullName}/pull/${number}` };
+  }
+  async findOpenPullRequest(_installationId: number, fullName: string, head: string, base: string) {
+    const pr = this.pullRequests.find(
+      (p) =>
+        p.fullName === fullName &&
+        p.head === head &&
+        p.base === base &&
+        !this.isClosed(fullName, p.number),
+    );
+    return pr
+      ? { number: pr.number, htmlUrl: `https://github.com/${fullName}/pull/${pr.number}` }
+      : null;
+  }
+  async closePullRequest(
+    _installationId: number,
+    fullName: string,
+    number: number,
+    comment: string,
+  ) {
+    this.closedPullRequests.push({ fullName, number, comment });
+  }
+  private isClosed(fullName: string, number: number) {
+    return this.closedPullRequests.some((c) => c.fullName === fullName && c.number === number);
   }
 
   // ---- M5: branches, issue close (batch compensation), failure injection ----

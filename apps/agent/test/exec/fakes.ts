@@ -81,7 +81,6 @@ export class FakeDocker implements DockerOps {
   sidecars = new Map<string, string[]>();
   /** Containers whose `pause` fails although they are running. */
   pauseFails = new Set<string>();
-  createEnv: Record<string, string>[] = [];
   usageJsonl = '';
 
   async build(spec: BuildSpec) {
@@ -98,9 +97,8 @@ export class FakeDocker implements DockerOps {
     this.calls.push(['removeNetwork', name]);
     this.networks.delete(name);
   }
-  async create(args: string[], env: Record<string, string>) {
+  async create(args: string[]) {
     this.calls.push(['create', args]);
-    this.createEnv.push(env);
     const name = args[args.indexOf('--name') + 1] as string;
     this.containers.add(name);
   }
@@ -178,8 +176,11 @@ export class FakeDocker implements DockerOps {
 
 export class FakeScreen implements ScreenOps {
   sessions = new Map<string, string[]>();
-  async start(name: string, argv: string[]) {
+  /** Environment each session's command was started with. */
+  envs = new Map<string, Record<string, string>>();
+  async start(name: string, argv: string[], env: Record<string, string> = {}) {
     this.sessions.set(name, argv);
+    this.envs.set(name, env);
   }
   async exists(name: string) {
     return this.sessions.has(name);
@@ -241,6 +242,7 @@ export function offer(
 export interface FakeRun {
   argv: string[];
   input: string;
+  env: Record<string, string>;
   stdout: (line: string) => void;
   stderr: (line: string) => void;
   /** Ends the process with this exit code. */
@@ -258,10 +260,19 @@ export class FakeProc implements ProcessOps {
     input: string,
     stdout: (line: string) => void,
     stderr: (line: string) => void,
+    env: Record<string, string> = {},
   ): RunningProcess {
     let resolve!: (code: number) => void;
     const exit = new Promise<number>((r) => (resolve = r));
-    const run: FakeRun = { argv, input, stdout, stderr, finish: (c) => resolve(c), killed: false };
+    const run: FakeRun = {
+      argv,
+      input,
+      env,
+      stdout,
+      stderr,
+      finish: (c) => resolve(c),
+      killed: false,
+    };
     this.runs.push(run);
     const script = this.script;
     if (script) queueMicrotask(() => script(run));
