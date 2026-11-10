@@ -776,6 +776,46 @@ describe('progress racing a lost lease', () => {
     }
   });
 
+  it('task.pushed does not close the PR that a concurrent processing recorded', async () => {
+    const { agent, t, offer, repo } = await running();
+    // A (this delivery) opens the PR; meanwhile B (the same message taken over) reuses it and
+    // records it: A's guarded write then fails.
+    const real = gh.createPullRequest.bind(gh);
+    vi.spyOn(gh, 'createPullRequest').mockImplementationOnce(async (...args) => {
+      const pr = await real(...args);
+      await prisma.$transaction([
+        prisma.assignment.update({
+          where: { id: offer.assignmentId },
+          data: { status: 'PUSHED', lastSeq: 1 },
+        }),
+        prisma.task.update({
+          where: { id: t.id },
+          data: { status: 'IN_REVIEW', prNumber: pr.number, prUrl: pr.htmlUrl },
+        }),
+      ]);
+      return pr;
+    });
+    const ack = await agent.client.call(
+      agentMessage('task.pushed', {
+        assignmentId: offer.assignmentId,
+        seq: 1,
+        branch: offer.task.branchName,
+        headSha: 'abc123',
+        changedFiles: 1,
+        summary: 's',
+      }),
+    );
+    expect(ack.duplicate).toBe(true);
+    const pr = gh.pullRequests.find(
+      (p) => p.fullName === repo.fullName && p.head === offer.task.branchName,
+    )!;
+    expect(gh.closedPullRequests.some((c) => c.number === pr.number)).toBe(false);
+    expect(await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).toMatchObject({
+      status: 'IN_REVIEW',
+      prNumber: pr.number,
+    });
+  });
+
   it('task.pushed does not take over an open PR of the same branch into another base', async () => {
     const { agent, t, offer, repo } = await running();
     gh.rejectDuplicatePullRequests = true;

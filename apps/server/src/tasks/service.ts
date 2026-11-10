@@ -1548,16 +1548,25 @@ export class TaskService {
       return true;
     });
     if (!recorded) {
-      // The run was lost meanwhile (the task went back to the pool): the pull request just opened
-      // for it belongs to nothing. One reused from an earlier delivery is left as it is.
-      let closed = false;
-      if (created) {
-        closed = await github
-          .closePullRequest(installationId, fullName, pr.number, ORPHAN_PR_COMMENT)
-          .then(() => true)
-          .catch(() => false);
+      // Another processing of the same message (a slow first one taken over, see the gateway) may
+      // have reused this pull request and recorded it: then it is the run's PR, not an orphan.
+      const [nowTask, nowAssignment] = await Promise.all([
+        this.prisma.task.findUnique({ where: { id: task.id }, select: { prNumber: true } }),
+        this.prisma.assignment.findUnique({ where: { id: a.id }, select: { status: true } }),
+      ]);
+      const owned = nowTask?.prNumber === pr.number || nowAssignment?.status === 'PUSHED';
+      if (!owned) {
+        // The run was lost meanwhile (the task went back to the pool): the pull request just
+        // opened for it belongs to nothing. One reused from an earlier delivery is left as it is.
+        let closed = false;
+        if (created) {
+          closed = await github
+            .closePullRequest(installationId, fullName, pr.number, ORPHAN_PR_COMMENT)
+            .then(() => true)
+            .catch(() => false);
+        }
+        await this.agentAudit(agent, 'task.pr_orphaned', a, { prNumber: pr.number, closed });
       }
-      await this.agentAudit(agent, 'task.pr_orphaned', a, { prNumber: pr.number, closed });
       return { ack: await this.changedMeanwhile(agent, p.assignmentId, p.seq) };
     }
     await this.agentAudit(agent, 'task.pushed', a, {
