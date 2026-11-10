@@ -8,6 +8,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 - A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm run check:licences`).
 - The README states that the agent image installs Claude Code, which is proprietary software from Anthropic, and that orch itself is MIT.
+- `install.sh` lets the member choose the Claude plan (`ORCH_PLAN`, or a question on a terminal) instead of always writing `pro`, and checks for Docker 26 or newer and a reachable daemon with a message that says what to do.
 
 ### Changed
 

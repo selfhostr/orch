@@ -9,7 +9,8 @@
 #   --force        re-enroll even if already enrolled
 #   --uninstall    stop and remove containers and volumes (and the ~/.local/bin/orch shortcut)
 #   --purge        with --uninstall: also delete the install directory
-#   --yes          do not ask for confirmation (also skips the Claude login offer)
+#   --yes          do not ask for confirmation (also skips the plan question and the Claude login offer)
+# Environment: ORCH_PLAN=pro|max5|max20 sets the Claude plan without asking (default pro; asked on a terminal).
 # After installing it writes a shortcut ~/.local/bin/orch (runs `orch` inside the agent container)
 # and, when a terminal is available, offers to run `orch login` right away.
 # Tests: docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck install.sh
@@ -72,9 +73,22 @@ WRAPPER_MARK="# orch-shortcut: managed by install.sh"
 # The terminal used for questions (stdin is the curl pipe). ORCH_TTY overrides it (tests).
 TTY_DEV="${ORCH_TTY:-/dev/tty}"
 
+MIN_DOCKER_MAJOR=26
+
+# check_docker [version]: docker and compose are installed and the daemon answers. With "version",
+# the daemon must also be Docker Engine 26 or newer (the install needs it; an uninstall does not).
 check_docker() {
-  command -v docker >/dev/null 2>&1 || die "docker is not installed. Install Docker Engine 26+ first: https://docs.docker.com/engine/install/"
+  command -v docker >/dev/null 2>&1 || die "docker is not installed. Install Docker Engine ${MIN_DOCKER_MAJOR}+ first: https://docs.docker.com/engine/install/"
   docker compose version >/dev/null 2>&1 || die "the docker compose plugin is missing. See https://docs.docker.com/compose/install/linux/"
+  dver="$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+  [ -n "$dver" ] || die "cannot talk to the Docker daemon. If it is not running, start it (sudo systemctl start docker). If you see 'permission denied', add your user to the docker group (sudo usermod -aG docker \"\$USER\"), then log out and back in, or use rootless Docker."
+  if [ "${1:-}" = "version" ]; then
+    dmajor="${dver%%.*}"
+    case "$dmajor" in
+      '' | *[!0-9]*) ;; # not a plain number (unusual build): do not block
+      *) [ "$dmajor" -ge "$MIN_DOCKER_MAJOR" ] || die "Docker Engine ${dver} is too old: orch needs ${MIN_DOCKER_MAJOR} or newer. Upgrade it: https://docs.docker.com/engine/install/" ;;
+    esac
+  fi
 }
 
 compose() { docker compose -f "$DIR/compose.yaml" --env-file "$DIR/.env" "$@"; }
@@ -217,14 +231,38 @@ ORCH_AGENT_ID=$AGENT_ID
 ORCH_AGENT_CREDENTIAL=$CREDENTIAL
 ORCH_WORK_DIR=$DIR/work
 ORCH_CLAUDE_DIR=${HOME}/.claude
-ORCH_PLAN=pro
+ORCH_PLAN=$PLAN
 ENVFILE
   chmod 600 "$tmp"
   mv "$tmp" "$DIR/.env"
 }
 
+# choose_plan: sets PLAN from $ORCH_PLAN if defined, else asks on a terminal, else defaults to pro.
+# pro, max5 and max20 are the plans the agent knows; it starts its budget estimate from this one.
+choose_plan() {
+  PLAN="${ORCH_PLAN:-}"
+  if [ -n "$PLAN" ]; then
+    case "$PLAN" in pro | max5 | max20) return 0 ;; esac
+    die "ORCH_PLAN must be pro, max5 or max20 (got '$PLAN')"
+  fi
+  PLAN=pro
+  if [ "$YES" -eq 1 ] || ! have_tty; then return 0; fi
+  tries=0
+  while [ "$tries" -lt 3 ]; do
+    printf 'Your Claude plan: pro, max5 or max20 [pro] ' >>"$TTY_DEV"
+    read -r answer <"$TTY_DEV" || answer=""
+    case "$answer" in
+      "") return 0 ;;
+      pro | max5 | max20) PLAN="$answer"; return 0 ;;
+    esac
+    printf 'Please answer pro, max5 or max20.\n' >>"$TTY_DEV"
+    tries=$((tries + 1))
+  done
+  PLAN=pro
+}
+
 do_install() {
-  check_docker
+  check_docker version
   command -v curl >/dev/null 2>&1 || die "curl is required"
   [ -n "$SERVER" ] || die "server URL unknown; pass --server <url> or set ORCH_SERVER_URL"
   mkdir -p "$DIR/work" "${HOME}/.claude"
@@ -236,9 +274,10 @@ do_install() {
   if [ -n "$(env_value ORCH_AGENT_CREDENTIAL)" ] && [ "$FORCE" -eq 0 ]; then
     info "Already enrolled (use --force to re-enroll). Keeping $DIR/.env."
   else
+    choose_plan
     enroll
     write_env
-    info "Enrolled as $AGENT_ID."
+    info "Enrolled as $AGENT_ID (plan: $PLAN; change ORCH_PLAN in $DIR/.env, then docker compose up -d)."
   fi
 
   compose up -d
