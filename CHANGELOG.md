@@ -16,6 +16,11 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 - Dependabot is the only dependency update tool: the second, unused update configuration is removed.
 - The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.
 
+### Fixed
+
+- A progress report (`task.status`, `task.pushed`, `task.finished`) racing the end of a lapsed lease no longer revives the run: a LOST assignment is not rewritten as RUNNING, PUSHED or SUCCEEDED, and its task, already back in the pool, does not go to IN_REVIEW.
+- `task.pushed` sent again after its first delivery opened the pull request but failed to record it reuses that pull request instead of failing on GitHub's 422 at every retry (only an open pull request with the same branch and base, and only for the 422 that says one already exists). A pull request opened for a run declared lost before it was recorded is closed with a comment explaining why.
+
 ### Security
 
 - Admins (`ORCH_ADMIN_GITHUB_LOGINS`) and listed logins (`ORCH_ALLOWED_GITHUB_LOGINS`) are bound to the GitHub account id of their first sign-in. A login that its owner renamed away from and that someone else took over no longer gives admin rights or access, and access decisions (approve, deny, remove) follow a renamed account. Existing installations bind each listed login, in the background after startup, to the user who already signed in with it once GitHub confirms that account still has the login, so current admins stay admins; while GitHub cannot answer, open sessions keep the decision by login. Bindings are logged and shown on the Access page. A new account signing in with a login still stored for another account no longer fails with an error 500. See "Who may sign in" in the configuration docs.
