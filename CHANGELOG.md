@@ -8,9 +8,11 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 - A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm run check:licences`).
 - The README states that the agent image installs Claude Code, which is proprietary software from Anthropic, and that orch itself is MIT.
+- `install.sh` lets the member choose the Claude plan (`ORCH_PLAN`, or a question on a terminal) instead of always writing `pro`, and checks for Docker 26 or newer and a reachable daemon with a message that says what to do.
 
 ### Changed
 
+- Dependabot is the only dependency update tool: the second, unused update configuration is removed.
 - The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.
 
 ### Security
