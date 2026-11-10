@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { Notification, NotificationSettings, Prisma } from '@prisma/client';
+import { Prisma, type Notification, type NotificationSettings } from '@prisma/client';
 import {
   MarkNotificationsReadRequestSchema,
   NotificationEvent,
@@ -317,12 +317,28 @@ export function registerNotifications(
       throw err;
     }
     const userAgent = String(req.headers['user-agent'] ?? '').slice(0, 200) || null;
-    // A browser has one endpoint: if another member used it before, it now belongs to the caller.
-    await prisma.pushSubscription.upsert({
-      where: { endpoint },
-      create: { userId: user.id, endpoint, ...body.keys, userAgent },
-      update: { userId: user.id, ...body.keys, userAgent },
+    // An endpoint registered by another member stays theirs: taking it over would let anyone who
+    // learnt it cut that member off (and point their notifications at keys of their choosing).
+    const taken = new HttpError(
+      409,
+      'push_endpoint_taken',
+      'This browser receives the notifications of another member: they must switch them off first',
+    );
+    const data = { ...body.keys, userAgent };
+    const mine = await prisma.pushSubscription.updateMany({
+      where: { endpoint, userId: user.id },
+      data,
     });
+    if (mine.count === 0) {
+      try {
+        await prisma.pushSubscription.create({ data: { userId: user.id, endpoint, ...data } });
+      } catch (err) {
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'))
+          throw err;
+        const owner = await prisma.pushSubscription.findUnique({ where: { endpoint } });
+        if (owner?.userId !== user.id) throw taken;
+      }
+    }
     const all = await prisma.pushSubscription.findMany({
       where: { userId: user.id },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],

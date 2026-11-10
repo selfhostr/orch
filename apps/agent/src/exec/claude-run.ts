@@ -8,6 +8,7 @@
 import { spawn } from 'node:child_process';
 import type { TaskSize } from '@orch/shared';
 import { childEnv } from './runner';
+import { CLAUDE_TOKEN_EXEC_ARGS } from './sandbox';
 
 /** `--max-turns` by task size. */
 export const MAX_TURNS: Record<TaskSize, number> = { S: 100, M: 200, L: 300 };
@@ -25,12 +26,16 @@ export interface AutoArgvSpec {
   size: TaskSize;
 }
 
-/** `docker exec -i -w <ws> <container> <claude> -p ...`. No host path, no secret. */
+/**
+ * `docker exec -i -e CLAUDE_CODE_OAUTH_TOKEN -w <ws> <container> <claude> -p ...`. No host path,
+ * no secret: the token is passed by name, its value is in the spawn environment.
+ */
 export function buildAutoArgv(s: AutoArgvSpec): string[] {
   return [
     'docker',
     'exec',
     '-i',
+    ...CLAUDE_TOKEN_EXEC_ARGS,
     '-w',
     s.workspaceFolder,
     s.container,
@@ -153,12 +158,16 @@ export interface RunningProcess {
 }
 
 export interface ProcessOps {
-  /** Starts argv (no shell), writes `input` to stdin, reports output line by line. */
+  /**
+   * Starts argv (no shell), writes `input` to stdin, reports output line by line. `env`: extra
+   * environment of this child only (secret values, never in argv).
+   */
   spawnLines(
     argv: string[],
     input: string,
     onStdout: (line: string) => void,
     onStderr: (line: string) => void,
+    env?: Record<string, string>,
   ): RunningProcess;
 }
 
@@ -187,9 +196,9 @@ function lineSplitter(cb: (line: string) => void) {
 }
 
 export const spawnProcessOps: ProcessOps = {
-  spawnLines(argv, input, onStdout, onStderr) {
+  spawnLines(argv, input, onStdout, onStderr, env = {}) {
     const [cmd = '', ...args] = argv;
-    const child = spawn(cmd, args, { env: childEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(cmd, args, { env: childEnv(env), stdio: ['pipe', 'pipe', 'pipe'] });
     const out = lineSplitter(onStdout);
     const err = lineSplitter(onStderr);
     child.stdout.setEncoding('utf8').on('data', (c: string) => out.push(c));
