@@ -9,14 +9,17 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 - The CI job "Licences and advisories" also runs `pnpm audit --prod --audit-level=high` (high and critical advisories in production dependencies fail the build).
 - A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm run check:licences`).
 - The README states that the agent image installs Claude Code, which is proprietary software from Anthropic, and that orch itself is MIT.
+- `install.sh` lets the member choose the Claude plan (`ORCH_PLAN`, or a question on a terminal) instead of always writing `pro`, and checks for Docker 26 or newer and a reachable daemon with a message that says what to do.
 
 ### Changed
 
+- Dependabot is the only dependency update tool: the second, unused update configuration is removed.
 - The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.
 
 ### Security
 
 - `glob` and `minimatch` are forced to patched versions (GHSA-3g3m-2fjr-6pw4, GHSA-g3hv-75wg-m249) through `overrides` in `pnpm-workspace.yaml`.
+- A release tag is refused unless its commit is on `main` and every CI run of that commit succeeded. The `latest` image tag only moves for a stable version, never for a pre-release such as `v1.0.0-rc.1`. The release checkout no longer keeps the workflow token.
 - Avatars are served and cached by the orch server (`/api/avatars/...`, only from GitHub's avatar host, size-limited, with a timeout) instead of being loaded by the browser from `avatars.githubusercontent.com`: GitHub's CDN no longer sees your visitors' IP addresses. The production CSP is now `img-src 'self' data:`.
 
 ## 0.9.1 - 2026-11-04

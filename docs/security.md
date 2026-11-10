@@ -74,5 +74,5 @@ One shared module (`packages/shared/src/redact`) masks secrets as `[REDACTED]`. 
 - Repos must build from a `Dockerfile` or a simple `.devcontainer.json`; complex devcontainer features are not honored.
 - Manual-mode `screen` sessions end if the agent container restarts; the task container survives and `orch attach <n>` reopens a session.
 - One concurrent task per machine by default.
-- GitHub only. English UI only.
+- GitHub only. The web UI is in English and French.
 - The production images run TypeScript through `tsx` rather than a compiled build; the server image is still about 380 MB (Alpine, trimmed Prisma CLI).

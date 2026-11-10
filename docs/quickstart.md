@@ -4,18 +4,18 @@ The shortest path from nothing to a first task. Each step links to the full page
 
 You need a Linux host with Docker Engine 26+ (Compose plugin), ports 80 and 443 reachable, and a DNS name for the server; and, on every member machine, Docker Engine 26+ with `curl` and `sh`.
 
-1. **Deploy the server.** Point a DNS record at the host, then:
+1. **Create the GitHub App** ({doc}`github-app`; its webhook secret is the value you generate for `GITHUB_WEBHOOK_SECRET`) and save its private key as `deploy/server/secrets/github-app.pem`. The file must exist before the first start, otherwise Docker creates a directory in its place ({doc}`installation`).
+
+2. **Deploy the server.** Point a DNS record at the host, then:
 
    ```sh
    git clone https://github.com/selfhostr/orch.git
    cd orch/deploy/server
-   cp .env.example .env     # fill it in, see Installation
+   cp .env.example .env     # set ORCH_DOMAIN, ORCH_ADMIN_GITHUB_LOGINS, the generated secrets and the GITHUB_* values
    docker compose up -d
    ```
 
-   Details: {doc}`installation`.
-
-2. **Create the GitHub App** and put its identifiers in `.env`: {doc}`github-app`.
+   The variables and the commands that generate the secrets: {doc}`installation`.
 
 3. **Sign in** at `https://<domain>` with GitHub, install the App on a repository and register it as a project on the **Projects** page.
 
