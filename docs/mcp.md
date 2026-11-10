@@ -17,6 +17,17 @@ The **Claude Code** page of the web UI shows the command pre-filled with your do
 
 Under the hood this is MCP OAuth 2.1: discovery (`/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`), dynamic client registration, the authorization code flow with PKCE (S256), access tokens (`orch_oat_...`, 1 hour) bound to `https://<domain>/mcp`, and rotating refresh tokens. Everything is stored hashed and audited. A member removed from the allowlist loses every token.
 
+(mcp-redirect-hosts)=
+
+### Allowed redirect addresses
+
+After approval the browser, with the authorization code, goes back to the client's `redirect_uri`. orch accepts only two kinds:
+
+- loopback `http` on any port: `127.0.0.1`, `[::1]` and `localhost` (RFC 8252). This is what Claude Code uses;
+- `https` on a host listed in `ORCH_OAUTH_REDIRECT_HOSTS` (comma-separated, default `claude.ai,claude.com` for the Claude web connectors). The host must match exactly: `evil.claude.ai` or `claude.ai.example.org` do not match `claude.ai`. Add `:port` for a non-standard port (`:443` is the default and is ignored). Set it to `none` to allow no https host, loopback only.
+
+Registration with any other address is refused, and the rule is checked again at every authorization and token request: if you remove a host from the list, its clients can no longer authorize, exchange a code or refresh. Access tokens they already hold keep working until they expire, at most 1 hour later; revoke them on the **Claude Code** page to cut them off at once. An invalid authorization request whose address is not allowed shows an error page and is never redirected. The consent page shows the redirect host: deny if it is not the one you expect.
+
 ## Personal access tokens (scripts and CI)
 
 Create a personal access token on the **Claude Code** page (shown once, hashed, revocable) and send it as a header:
@@ -36,6 +47,7 @@ claude mcp add --transport http --scope user orch https://<domain>/mcp \
 | `list_templates` | Task templates you can use (built-in, personal, project)   |
 | `take_task`      | Claim a task (same checks as `orch take`)                  |
 | `task_status`    | Status of a task                                           |
+| `retry_task`     | Offer a task again after failed runs (owner or creator)    |
 
 ## Task templates
 
