@@ -18,7 +18,7 @@ import {
 } from '@orch/shared';
 import { sha256Hex } from '../src/auth/crypto';
 import { OfferRefusedError } from '../src/agents';
-import { purgeRetention } from '../src/usage';
+import { MessageSeenGoneError, purgeRetention, recordUsage } from '../src/usage';
 import { FakeGithub, api, loginAs, makeApp, prisma, type TestUser } from './harness';
 
 const FAST = {
@@ -433,7 +433,7 @@ describe('agent websocket protocol', () => {
       () => client.msgs.filter((x) => x.type === 'ack' && x.replyTo === m.id).length === 2,
     );
     const acks = client.msgs.filter((x) => x.type === 'ack' && x.replyTo === m.id);
-    expect(acks[1]!.payload).toEqual({ ok: true, duplicate: true });
+    expect(acks.map((x) => x.payload)).toEqual([{ ok: true }, { ok: true, duplicate: true }]);
     expect(await prisma.usageReport.count({ where: { agentId } })).toBe(1);
     const row = await prisma.usageReport.findFirstOrThrow({ where: { agentId } });
     expect(row).toMatchObject({ userId: user.userId, inputTokens: 100n, weightedTokens: 400n });
@@ -448,6 +448,112 @@ describe('agent websocket protocol', () => {
     });
     const agentRow = await prisma.agent.findUniqueOrThrow({ where: { id: agentId } });
     expect(agentRow.lastUsageAt).not.toBeNull();
+    client.close();
+  });
+
+  it('a message seen but never acked (process died) is processed again on resend, once', async () => {
+    const { agentId, client } = await onlineAgent();
+    const m = agentMessage('usage.report', usage());
+    // What a crash between the dedupe row and the ack leaves behind.
+    await prisma.agentMessageSeen.create({
+      data: { agentId, messageId: m.id, seenAt: new Date(Date.now() - 10 * 60_000) },
+    });
+    // Two resends in a row: the first takes the stale row over, the second replays its answer.
+    client.send(m);
+    client.send(m);
+    await until(
+      () => client.msgs.filter((x) => x.type === 'ack' && x.replyTo === m.id).length === 2,
+    );
+    const acks = client.msgs.filter((x) => x.type === 'ack' && x.replyTo === m.id);
+    expect(acks.map((x) => x.payload)).toEqual([{ ok: true }, { ok: true, duplicate: true }]);
+    expect(await prisma.usageReport.count({ where: { agentId } })).toBe(1);
+    const row = await prisma.agentMessageSeen.findUniqueOrThrow({
+      where: { agentId_messageId: { agentId, messageId: m.id } },
+    });
+    expect(row.ack).toEqual({ ok: true });
+    client.close();
+  });
+
+  it('two concurrent resends of a stale unacked message: only one takes it over', async () => {
+    const { agentId, user, client } = await onlineAgent();
+    const messageId = 'stale-concurrent';
+    await prisma.agentMessageSeen.create({
+      data: { agentId, messageId, seenAt: new Date(Date.now() - 10 * 60_000) },
+    });
+    const gateway = app.agentGateway as unknown as {
+      deps: { prisma: typeof prisma };
+      ackDuplicate(c: unknown, id: string): Promise<boolean>;
+    };
+    // Barrier on the read: both takeovers read the stale row before either one writes.
+    const real = gateway.deps;
+    let arrived = 0;
+    let open!: () => void;
+    const both = new Promise<void>((r) => (open = r));
+    gateway.deps = {
+      ...real,
+      prisma: {
+        agentMessageSeen: {
+          findUnique: async (args: Parameters<typeof prisma.agentMessageSeen.findUnique>[0]) => {
+            const row = await real.prisma.agentMessageSeen.findUnique(args);
+            if (++arrived === 2) open();
+            await both;
+            return row;
+          },
+          updateMany: (args: Parameters<typeof prisma.agentMessageSeen.updateMany>[0]) =>
+            real.prisma.agentMessageSeen.updateMany(args),
+        },
+      } as unknown as typeof prisma,
+    };
+    const conn = (n: number) => ({
+      agentId,
+      userId: user.userId,
+      socket: { readyState: 1, OPEN: 1, send: () => undefined },
+      n,
+    });
+    try {
+      const won = await Promise.all([
+        gateway.ackDuplicate(conn(1), messageId),
+        gateway.ackDuplicate(conn(2), messageId),
+      ]);
+      expect(arrived).toBe(2);
+      expect(won.filter(Boolean)).toHaveLength(1);
+    } finally {
+      gateway.deps = real;
+    }
+    client.close();
+  });
+
+  it('a usage report whose dedupe row is gone is an error, not stored and not acked', async () => {
+    const { agentId, user, client } = await onlineAgent();
+    const who = { id: agentId, userId: user.userId };
+    await expect(recordUsage(prisma, who, usage(), new Date(), 'row-gone')).rejects.toBeInstanceOf(
+      MessageSeenGoneError,
+    );
+    expect(await prisma.usageReport.count({ where: { agentId } })).toBe(0);
+    client.close();
+  });
+
+  it('a usage report processed twice for one message is stored once', async () => {
+    const { agentId, user, client } = await onlineAgent();
+    const messageId = 'usage-twice';
+    await prisma.agentMessageSeen.create({ data: { agentId, messageId } });
+    const who = { id: agentId, userId: user.userId };
+    expect(await recordUsage(prisma, who, usage(), new Date(), messageId)).toBe(true);
+    expect(await recordUsage(prisma, who, usage(), new Date(), messageId)).toBe(false);
+    expect(await prisma.usageReport.count({ where: { agentId } })).toBe(1);
+    client.close();
+  });
+
+  it('a message still being processed gets no answer on resend', async () => {
+    const { agentId, client } = await onlineAgent();
+    const m = agentMessage('usage.report', usage());
+    await prisma.agentMessageSeen.create({ data: { agentId, messageId: m.id } });
+    client.send(m);
+    const probe = agentMessage('usage.report', usage());
+    client.send(probe);
+    await client.next('ack', (x) => x.replyTo === probe.id, 10_000);
+    expect(client.msgs.some((x) => x.type === 'ack' && x.replyTo === m.id)).toBe(false);
+    expect(await prisma.usageReport.count({ where: { agentId } })).toBe(1);
     client.close();
   });
 
