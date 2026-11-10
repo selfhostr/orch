@@ -100,6 +100,13 @@ export function OAuthConsent() {
             { client: d.clientName, host: d.redirectHost, login: d.login },
           )}
         </p>
+        <p>
+          {rich(
+            'auth.consent.redirect',
+            { strong: (c) => <strong>{c}</strong> },
+            { host: d.redirectHost },
+          )}
+        </p>
         <p className="warning">{t('auth.consent.warning')}</p>
         {decide.error && <p className="error">{errorMessage(decide.error)}</p>}
         <div className="card-foot">

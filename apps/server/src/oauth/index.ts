@@ -7,7 +7,12 @@
  * Security notes:
  * - every URL (issuer, endpoints, resource) comes from ORCH_PUBLIC_URL / ORCH_BASE_URL, never
  *   from the request, so it is right behind Cloudflare Tunnel;
- * - public clients only, PKCE S256 mandatory, exact redirect_uri match, loopback http or https;
+ * - public clients only, PKCE S256 mandatory, exact redirect_uri match; a redirect_uri is loopback
+ *   http (RFC 8252) or https on a host of ORCH_OAUTH_REDIRECT_HOSTS, checked at registration and
+ *   again at every authorization and token request (a client registered before the rule, or whose
+ *   host was removed from the list, is refused);
+ * - an authorization request is never redirected to a URI that fails this rule: such errors get
+ *   an error page, the others go back to the client with `error=` (RFC 6749 section 4.1.2.1);
  * - client ids, codes and tokens are stored as SHA-256 only;
  * - codes are single use (60 s), access tokens live 1 h, refresh tokens rotate and a reused one
  *   revokes the whole grant (token family);
@@ -95,8 +100,13 @@ export function authorizationServerMetadata(urls: OAuthUrls) {
   };
 }
 
-/** Loopback http (any port) or https, absolute, no fragment, no credentials. */
-export function isAllowedRedirectUri(raw: string): boolean {
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', '[::1]', 'localhost']);
+
+/**
+ * Absolute, no fragment, no credentials, and either loopback http on any port (RFC 8252 section
+ * 7.3) or https whose host (with its port, if not 443) is exactly one of `httpsHosts`.
+ */
+export function isAllowedRedirectUri(raw: string, httpsHosts: readonly string[]): boolean {
   let u: URL;
   try {
     u = new URL(raw);
@@ -104,9 +114,9 @@ export function isAllowedRedirectUri(raw: string): boolean {
     return false;
   }
   if (u.hash || u.username || u.password || raw.length > 2000) return false;
-  if (u.protocol === 'https:') return true;
+  if (u.protocol === 'https:') return httpsHosts.includes(u.host);
   if (u.protocol !== 'http:') return false;
-  return u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]';
+  return LOOPBACK_HOSTS.has(u.hostname);
 }
 
 const sha256B64Url = (v: string) => createHash('sha256').update(v).digest('base64url');
@@ -206,6 +216,8 @@ interface ValidRequest {
 export function registerOAuth(app: FastifyInstance, deps: AuthDeps): void {
   const { prisma, config } = deps;
   const urls = oauthUrls(config);
+  const redirectHosts = config.ORCH_OAUTH_REDIRECT_HOSTS;
+  const redirectAllowed = (uri: string) => isAllowedRedirectUri(uri, redirectHosts);
   // Shared by every instance: a client cannot multiply its budget by hitting several of them.
   const counter = new SharedCounter(prisma, config.ORCH_CLUSTER_NAME, app.log);
   const limits = {
@@ -238,8 +250,9 @@ export function registerOAuth(app: FastifyInstance, deps: AuthDeps): void {
       : Promise.resolve(null);
 
   /**
-   * Validates an authorization request. Problems with the client or the redirect URI are
-   * `fatal` (never redirect to an unverified URI); the others are reported to the client.
+   * Validates an authorization request. Problems with the client or the redirect URI (not
+   * registered, or no longer allowed by ORCH_OAUTH_REDIRECT_HOSTS) are `fatal`: never redirect to
+   * such a URI. The others are reported to the client at its verified, allowed redirect URI.
    */
   async function validate(
     p: OAuthAuthorizeParams,
@@ -257,6 +270,15 @@ export function registerOAuth(app: FastifyInstance, deps: AuthDeps): void {
         ok: false,
         fatal: true,
         message: 'The redirect URI is not registered for this client.',
+      };
+    }
+    // Re-checked on every request: clients registered before the rule, or whose host was removed
+    // from ORCH_OAUTH_REDIRECT_HOSTS, are refused.
+    if (!redirectAllowed(redirectUri)) {
+      return {
+        ok: false,
+        fatal: true,
+        message: `Redirecting to ${redirectHost(redirectUri)} is not allowed on this server.`,
       };
     }
     const fail = (error: string, message: string) =>
@@ -484,13 +506,13 @@ export function registerOAuth(app: FastifyInstance, deps: AuthDeps): void {
         !Array.isArray(uris) ||
         uris.length === 0 ||
         uris.length > MAX_REDIRECT_URIS ||
-        !uris.every((u): u is string => typeof u === 'string' && isAllowedRedirectUri(u))
+        !uris.every((u): u is string => typeof u === 'string' && redirectAllowed(u))
       ) {
         return sendOAuthError(
           reply,
           new OAuthError(
             'invalid_redirect_uri',
-            `1 to ${MAX_REDIRECT_URIS} redirect_uris, each https or http on localhost/127.0.0.1/[::1]`,
+            `1 to ${MAX_REDIRECT_URIS} redirect_uris, each http on 127.0.0.1/[::1]/localhost (any port) or https on ${redirectHosts.length ? redirectHosts.join(', ') : '(no https host allowed)'}`,
           ),
         );
       }
@@ -688,6 +710,10 @@ export function registerOAuth(app: FastifyInstance, deps: AuthDeps): void {
         await purge();
         const client = await findClient(field(req, 'client_id'));
         if (!client) throw new OAuthError('invalid_client', 'Unknown client', 401);
+        // A client with a redirect URI the current rule refuses gets no new token either.
+        if (!client.redirectUris.every(redirectAllowed)) {
+          throw new OAuthError('invalid_client', 'Redirect URI not allowed on this server', 401);
+        }
         const grantType = field(req, 'grant_type');
         const tokens =
           grantType === 'authorization_code'
