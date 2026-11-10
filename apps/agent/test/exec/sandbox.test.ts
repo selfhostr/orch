@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   BLANKED_AUTH_ENV,
   CLAUDE_TOKEN_ENV,
+  CLAUDE_TOKEN_EXEC_ARGS,
   SandboxError,
+  claudeTokenEnv,
   buildCreateArgs,
   type SandboxSpec,
 } from '../../src/exec/sandbox';
@@ -42,6 +44,13 @@ describe('sandbox create args', () => {
     expect(joined).not.toContain('/secrets');
   });
 
+  it('runs nothing of the image but the keep-alive: no healthcheck, entrypoint replaced', () => {
+    // A HEALTHCHECK runs as the task user while Claude runs and could read its environment.
+    expect(args.filter((a) => a === '--no-healthcheck')).toHaveLength(1);
+    expect(args).toContain('--init');
+    expect(values(args, '--entrypoint')).toEqual(['sleep']);
+  });
+
   it('runs as a non-root user without privileges', () => {
     expect(values(args, '--user')).toEqual(['1000:1000']);
     expect(values(args, '--cap-drop')).toEqual(['ALL']);
@@ -57,10 +66,14 @@ describe('sandbox create args', () => {
     expect(values(args, '--tmpfs')[0]).toMatch(/^\/tmp:/);
   });
 
-  it('passes the Claude token by name only and keeps sandbox env authoritative', () => {
+  it('never gives the container the Claude token and keeps sandbox env authoritative', () => {
     const envs = values(args, '-e');
-    expect(envs).toContain(CLAUDE_TOKEN_ENV);
-    expect(envs.filter((e) => e.startsWith(`${CLAUDE_TOKEN_ENV}=`))).toEqual([]);
+    // Blanked (also overrides an ENV of the repo's image); only the Claude exec gets the value.
+    expect(envs.filter((e) => e.startsWith(`${CLAUDE_TOKEN_ENV}=`))).toEqual([
+      `${CLAUDE_TOKEN_ENV}=`,
+    ]);
+    expect(CLAUDE_TOKEN_EXEC_ARGS).toEqual(['-e', CLAUDE_TOKEN_ENV]);
+    expect(claudeTokenEnv('v')).toEqual({ [CLAUDE_TOKEN_ENV]: 'v' });
     expect(envs).toContain('FOO=bar');
     expect(envs).toContain('DISABLE_TELEMETRY=1');
     expect(envs).toContain('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1');
@@ -107,8 +120,8 @@ describe('sandbox create args', () => {
         'CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR',
       ]),
     );
-    // The token variable (name only) is the last -e.
-    expect(e[e.length - 1]).toBe(CLAUDE_TOKEN_ENV);
+    // The token variable, blanked, is the last -e.
+    expect(e[e.length - 1]).toBe(`${CLAUDE_TOKEN_ENV}=`);
   });
 
   it('ends with the image and a keep-alive command', () => {

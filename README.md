@@ -1,24 +1,31 @@
 <div align="center">
 <a href="https://orch.selfhostr.io"><img src=".github/assets/banner.svg" alt="orch: A shared to-do list that turns into pull requests." width="100%"></a>
 
-**A shared to-do list for teams who trust each other, run on each member's own Claude subscription.**
+<h3>A shared to-do list for teams who trust each other, run on each member's own Claude subscription.</h3>
 
-[Site](https://orch.selfhostr.io) · [Docs](https://orch.selfhostr.io/docs/) · [Demo](https://orch.selfhostr.io/demo/) · [Changelog](CHANGELOG.md)
+[![CI](https://github.com/selfhostr/orch/actions/workflows/ci.yml/badge.svg)](https://github.com/selfhostr/orch/actions/workflows/ci.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/selfhostr/orch/badge)](https://scorecard.dev/viewer/?uri=github.com/selfhostr/orch) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[![CI](https://github.com/selfhostr/orch/actions/workflows/ci.yml/badge.svg)](https://github.com/selfhostr/orch/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 </div>
 
 ## Overview
 
-Tasks are GitHub issues. A member, or Claude Code through MCP, adds them to a shared pool. Each task then runs on a teammate's own machine, with their own Claude subscription, in a throwaway container that only sees its own git clone, and `orch` pushes a branch and opens a PR. Free, for good: MIT licence, no paid edition.
+- Tasks are GitHub issues. A member, or Claude Code through MCP, adds them to a shared pool.
+- Each task runs on a teammate's own machine, with their own Claude subscription, in a throwaway container that only sees its own git clone. `orch` pushes a branch and opens a PR.
+- Docs: [orch.selfhostr.io/docs](https://orch.selfhostr.io/docs/). Changes: [CHANGELOG.md](CHANGELOG.md).
+
+Free, for good. MIT licence, no paid edition.
 
 ## Quick start
 
-Server admin, once (Linux host, Docker 26+ with Compose, ports 80 and 443, a DNS name):
+Try the [demo](https://orch.selfhostr.io/demo/) first if you like. Server admin, once (Linux host, Docker 26+ with Compose, ports 80 and 443, a DNS name pointing at it):
+
+1. Create the GitHub App and save its private key as `deploy/server/secrets/github-app.pem`. This must happen before the first start, otherwise Docker creates a directory with that name. Generate `GITHUB_WEBHOOK_SECRET` first (`openssl rand -hex 32`): it is also the App's webhook secret. See [GitHub App](https://orch.selfhostr.io/docs/github-app/).
+2. Fill in `.env`: at least `ORCH_DOMAIN`, `ORCH_ADMIN_GITHUB_LOGINS`, the generated secrets and the `GITHUB_*` values of the App: [installation](https://orch.selfhostr.io/docs/installation/).
+3. Start the server:
 
 ```sh
 git clone https://github.com/selfhostr/orch.git && cd orch/deploy/server
-cp .env.example .env     # fill it in, then create the GitHub App
+cp .env.example .env     # edit it as in step 2
 docker compose up -d
 ```
 
@@ -51,7 +58,7 @@ Caddy (automatic HTTPS, static web build) fronts a Fastify server with Postgres;
 - For teams who trust each other: anyone who can get an issue labeled for the pool can write a prompt that runs on a teammate's machine. Do not use it with strangers or public repos.
 - In auto mode the task container runs with `bypassPermissions`, network access and the member's Claude token, with no egress filtering.
 - The agent is root-equivalent on the member's host (it mounts `/var/run/docker.sock`); rootless Docker reduces this.
-- Single server instance by default; usage and budget are estimates. GitHub only, English UI only.
+- Single server instance by default; usage and budget are estimates. GitHub only. The web UI is in English and French.
 - The agent image installs Claude Code, which is proprietary software from Anthropic and is subject to Anthropic's terms; orch itself is MIT-licensed.
 - Releases are `0.x`: anything may change between minor versions. See the [security model](https://orch.selfhostr.io/docs/security/).
 
@@ -63,6 +70,8 @@ Issues and pull requests are welcome: [CONTRIBUTING.md](CONTRIBUTING.md). Securi
 
 MIT, see [LICENSE](LICENSE). Provided "as is", without warranty of any kind.
 
-## Support
+## Support orch
 
-orch is free and has no company behind it. If it saves you time: [sponsor us on GitHub](https://github.com/sponsors/selfhostr).
+orch is free and has no company behind it. If it saves you time, you can support its development:
+
+[Sponsor us on GitHub](https://github.com/sponsors/selfhostr), recurring or one-off.

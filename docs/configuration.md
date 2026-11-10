@@ -8,11 +8,12 @@ Every environment variable and its default, for the server, the agent and develo
 
 | Variable                                                                                               | Required    | Meaning                                                                                                           |
 | ------------------------------------------------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| `ORCH_DOMAIN`                                                                                          | yes         | Public host name (example: `orch-app.selfhostr.io`)                                                               |
+| `ORCH_DOMAIN`                                                                                          | yes         | Public host name (example: `orch.example.com`)                                                                    |
 | `HTTP_PORT`, `HTTPS_PORT`                                                                              | no          | Host ports for Caddy (default 80 and 443). The only ports published                                               |
 | `ORCH_BASE_URL`                                                                                        | no          | Public URL, default `https://$ORCH_DOMAIN`. Set only for a non-standard port                                      |
 | `ORCH_TLS_MODE`, `ORCH_BIND_ADDR`, `HTTPS_PUBLISH`, `ORCH_PUBLIC_URL`                                  | no          | Cloudflare Tunnel mode, see [installation](installation.md#behind-cloudflare-tunnel)                              |
 | `ORCH_TRUST_PROXY`                                                                                     | no          | Peers allowed to set `X-Forwarded-*` (default: private networks, i.e. Caddy)                                      |
+| `ORCH_OAUTH_REDIRECT_HOSTS`                                                                            | no          | https hosts MCP OAuth clients may redirect to (exact match, default `claude.ai,claude.com`, or `none`)            |
 | `ORCH_VERSION`                                                                                         | no          | Image tag of `orch-server` and `orch-web` (default `latest`)                                                      |
 | `POSTGRES_PASSWORD`                                                                                    | yes         | Database password (`POSTGRES_USER` and `POSTGRES_DB` default to `orch`)                                           |
 | `ORCH_ENCRYPTION_KEY`                                                                                  | yes         | 32 random bytes, base64. Encrypts stored GitHub user tokens. Not in backups: store it separately ({doc}`backups`) |
@@ -65,6 +66,28 @@ Generate the pair once with `npx web-push generate-vapid-keys`.
 (\*) **In production the server refuses to start** when nobody restricts sign-in: no `ORCH_ADMIN_GITHUB_LOGINS`, no `ORCH_ALLOWED_GITHUB_LOGINS`, no `ORCH_ALLOWED_GITHUB_ORGS` and no access approved on the Access page, unless `ORCH_ALLOW_ANY_GITHUB_USER=true`. Without an allowlist, anyone with a GitHub account could sign in, see the projects set to "All orch users on this server" and join their pools.
 
 The usual setup is to list yourself in `ORCH_ADMIN_GITHUB_LOGINS` and let people in from the web UI (see "Managing access" in {doc}`installation`). A user may sign in if they are an admin, **or** their login is listed, **or** they are an active member of a listed organization, **or** an admin approved them on the Access page.
+
+**Listed logins are bound to a GitHub account.** GitHub lets anyone take a login that its owner renamed away from, so orch does not trust a login alone. The first time someone signs in with a login listed in `ORCH_ADMIN_GITHUB_LOGINS` or `ORCH_ALLOWED_GITHUB_LOGINS`, orch records their numeric GitHub account id for that login. From then on the account id decides:
+
+- the right follows the account: an admin who renames their GitHub account stays admin (and signs in) under the new login;
+- another account that later signs in with the listed login gets nothing from the list: it is refused like any unknown login (and is never admin, even with `ORCH_ALLOW_ANY_GITHUB_USER=true`);
+- approvals and refusals made on the Access page follow the account id too: a declined or removed user who renames their account is still refused.
+
+**The first sign-in wins.** Whoever signs in first with a listed login gets the right for good, so list only logins that already exist on GitHub and that you control (check the spelling), and sign in with them right after you start or restart the server with a new entry. The binding is logged as a warning (`Listed GitHub login bound to the account that signed in with it`), written to the audit log (`access.env_login_bound`) and shown on the Access page next to each listed login ("GitHub account <id>" or "not bound yet").
+
+**Existing installations.** After startup (in the background: a slow or unreachable GitHub never delays the start), each listed login that is not bound yet is bound to the user who last signed in with it, but only once GitHub confirms (`GET /user/{id}`, with an installation token, 5 seconds at most) that this account still has that login. Current admins therefore stay admins after the update. An open session of a listed login that is not bound yet is checked the same way at its next request: if GitHub confirms, the login is bound; if GitHub answers that the account has another login now (a stale user row), the right is refused; while GitHub cannot answer, the decision by login applies, as before logins were bound, so a GitHub outage at restart does not lock the team out, and GitHub is asked again a minute later.
+
+**Removing a login** from the variable (then restarting) removes the right at once; the binding is kept and applies again if the login is listed again.
+
+**Recovery: bind a listed login to another account** (for example after you deleted and recreated your GitHub account under the same login). Delete the binding, restart the server, then sign in with the new account right away:
+
+```sh
+docker compose exec postgres psql -U orch -d orch \
+  -c "DELETE FROM \"EnvLoginBinding\" WHERE \"githubLogin\" = 'your-login'"
+docker compose restart server
+```
+
+At startup the old account is not bound again (GitHub no longer gives it that login), and the first sign-in binds the new one. The old account's user row gives up the login (it is renamed `former~<id>`), so the new account signs in normally.
 
 Org membership is checked at login with the user's own GitHub token, and again for open sessions every `ORCH_ALLOWLIST_CACHE_SEC` seconds (default 300). Removing someone from the list or the org therefore takes effect within minutes (logins are re-checked on every request). Org checks need the GitHub App organization permission **Members: Read-only** ({doc}`github-app`) and the App installed on, or approved by, the organization. In development and tests an empty allowlist only logs a warning.
 

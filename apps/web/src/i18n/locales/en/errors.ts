@@ -21,6 +21,8 @@ export default {
     not_retryable: 'This task cannot be retried.',
     offer_closed: 'This request is no longer available: it was taken, withdrawn or has expired.',
     paused: 'Your agent is paused: resume it in My Server first.',
+    push_endpoint_taken:
+      'This browser already receives the notifications of another member: they must switch them off first.',
     push_not_configured: 'This server has no VAPID keys set.',
     server_version_unknown: 'This server runs a dev build.',
     task_cancelled: 'This task was cancelled.',

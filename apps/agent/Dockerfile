@@ -3,10 +3,10 @@
 #
 # Runs as root: the agent holds the host Docker socket (root-equivalent), owns
 # /run/orch.sock and the /data and /secrets volumes. Task containers are non-root.
-FROM docker:28-cli AS docker-cli
+FROM docker:28-cli@sha256:625d9431a9f54c5a2bc90f24f0e1c3d55b1349fd857dd85035f98c2c9acbdd4d AS docker-cli
 
 # ---- deps: production dependencies only. Built in parallel with the runtime stage below. ----
-FROM node:24-bookworm-slim AS deps
+FROM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS deps
 ENV COREPACK_HOME=/opt/corepack \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     CI=true
@@ -18,7 +18,7 @@ COPY apps/agent/package.json apps/agent/
 RUN pnpm install --frozen-lockfile --prod --filter "@orch/agent..."
 
 # ---- runtime ----
-FROM node:24-bookworm-slim
+FROM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git screen ca-certificates curl tini \
@@ -31,13 +31,19 @@ COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
 
 # Claude Code CLI (native installer), copied to /opt/orch/bin/claude so it can be
-# mounted read-only into task containers later. Auto-updates are disabled: the image pins it.
+# mounted read-only into task containers later. The version is pinned by CLAUDE_CODE_VERSION
+# (the installer accepts `stable`, `latest` or an exact X.Y.Z) and auto-updates are disabled.
+# The installer checks the SHA-256 of the binary it downloads against the release manifest; it
+# offers no way to give an expected checksum, so the pin is the version, not a hash.
+# Bump it on purpose, with the CHANGELOG, when a Claude Code release has been tried.
+ARG CLAUDE_CODE_VERSION=2.1.318
 ENV DISABLE_AUTOUPDATER=1
-RUN curl -fsSL https://claude.ai/install.sh | bash \
+RUN curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CODE_VERSION" \
  && mkdir -p /opt/orch/bin \
  && cp -L "$HOME/.local/bin/claude" /opt/orch/bin/claude \
  && chmod 0755 /opt/orch/bin/claude \
  && rm -rf "$HOME/.local/share/claude" "$HOME/.local/bin/claude" \
+ && /opt/orch/bin/claude --version | grep -qF "$CLAUDE_CODE_VERSION" \
  && /opt/orch/bin/claude --version
 
 # CI=true was set for pnpm in the former single-stage image and is part of the runtime

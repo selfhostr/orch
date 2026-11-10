@@ -253,6 +253,8 @@ describe('auto mode: headless run', () => {
       'docker',
       'exec',
       '-i',
+      '-e',
+      'CLAUDE_CODE_OAUTH_TOKEN',
       '-w',
       '/workspace',
       rec.container,
@@ -272,6 +274,11 @@ describe('auto mode: headless run', () => {
     expect(joined).not.toContain(t.cfg.workDir);
     expect(joined).not.toContain(t.cfg.dataDir);
     expect(joined).not.toContain(CLAUDE_TOKEN);
+    // The token is in the environment of the Claude exec only, never in the container.
+    expect(run.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: CLAUDE_TOKEN });
+    const createArgs = t.docker.calls.find((c) => c[0] === 'create')![1] as string[];
+    expect(createArgs).toContain('CLAUDE_CODE_OAUTH_TOKEN=');
+    expect(createArgs.join(' ')).not.toContain(CLAUDE_TOKEN);
     // The prompt goes through stdin, with the issue between delimiters.
     expect(run.input).toContain('Please add a toggle.');
     expect(run.input).toContain('<<<ORCH_ISSUE_BEGIN>>>');
@@ -576,7 +583,7 @@ describe('claude -p helpers', () => {
         size: 'L',
       }).join(' '),
     ).toBe(
-      'docker exec -i -w /workspaces/app orch-task-1-x /opt/orch/bin/claude -p --model opus ' +
+      'docker exec -i -e CLAUDE_CODE_OAUTH_TOKEN -w /workspaces/app orch-task-1-x /opt/orch/bin/claude -p --model opus ' +
         '--output-format stream-json --verbose --permission-mode bypassPermissions --max-turns 300',
     );
   });

@@ -165,10 +165,12 @@ export function registerParticipation(
       include: { user: true },
       orderBy: { createdAt: 'asc' },
     });
-    return rows.map((r) => ({
-      user: toApiUser(r.user, app.allowlist.isAdmin(r.user.login)),
-      participation: toParticipationView(r, project.requireParticipantApproval),
-    }));
+    return Promise.all(
+      rows.map(async (r) => ({
+        user: toApiUser(r.user, await app.allowlist.isAdmin(r.user)),
+        participation: toParticipationView(r, project.requireParticipantApproval),
+      })),
+    );
   });
 
   for (const decision of ['approve', 'reject'] as const) {
