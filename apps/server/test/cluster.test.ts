@@ -24,7 +24,17 @@ import { SHUT_OUT } from '../src/dispatch/snapshot';
 import { SharedCounter, SharedRateLimiter } from '../src/http/shared-limit';
 import { LiveLogStore } from '../src/logs/store';
 import type { PostResult } from '../src/notifications/ssrf';
-import { FakeGithub, api, loginAs, makeApp, prisma, repoFor, uid, type TestUser } from './harness';
+import {
+  FakeGithub,
+  api,
+  giveRole,
+  loginAs,
+  makeApp,
+  prisma,
+  repoFor,
+  uid,
+  type TestUser,
+} from './harness';
 
 const KEY = randomBytes(32).toString('base64');
 const CLUSTER = `c${uid()}`.slice(0, 40);
@@ -622,6 +632,8 @@ describe('two instances: a relayed claim without an answer', () => {
         mode: 'APPROVAL',
       },
     });
+    // Taking a task needs write access to the repository.
+    await giveRole(gh, projectId, member.login);
     // The socket is on F: E relays the offer.
     agent = await onlineAgent(member, e, f);
     await until(() => e.agentGateway.isConnected(agent.agentId));
