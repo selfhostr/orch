@@ -2,7 +2,17 @@
 
 All notable changes to orch. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions are `0.MINOR.PATCH` until 1.0. The full notes of each release are on the [releases page](https://github.com/selfhostr/orch/releases).
 
-## Unreleased
+## 0.10.0 - 2026-11-10
+
+### Upgrade notes
+
+- MCP OAuth clients: an https `redirect_uri` must now be on a host listed in `ORCH_OAUTH_REDIRECT_HOSTS` (default `claude.ai,claude.com`; `none` allows loopback only). Clients registered with another https host are refused and must register again, or the host must be added to the list.
+- Only members with write access (Write, Maintain or Admin) to the repository on GitHub run tasks, on public repositories too. Read-only collaborators are no longer offered tasks and cannot take one or get a push token.
+- The processes left running by a repository's `postCreateCommand` are stopped before Claude starts. A background service must be started from Claude or the project's scripts, or run as a compose sidecar.
+- Logins in `ORCH_ADMIN_GITHUB_LOGINS` and `ORCH_ALLOWED_GITHUB_LOGINS` are bound to the GitHub account id at the first sign-in. Existing logins are bound in the background after startup, once GitHub confirms the account.
+- Retention purges are on by default: audit entries after 365 days (`RETENTION_AUDIT_DAYS`, 0 or at least 30), webhook delivery ids after 30 (`RETENTION_WEBHOOK_DAYS`), offers that never started after 90 (`RETENTION_ASSIGNMENT_DAYS`), expired sessions and enrollment tokens after 7 (`RETENTION_EXPIRED_DAYS`). Set a variable to 0 to keep that table forever.
+- The retention migration builds indexes on `AuditLog`, `Session`, `EnrollmentToken` and `Assignment`. On a large audit log it can take a few seconds, and writes to those tables wait meanwhile.
+- New `CLAIM_CONFIRM_SEC` (default 300): a claimed task whose agent reports nothing for this long is cancelled.
 
 ### Added
 
