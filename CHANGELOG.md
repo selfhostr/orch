@@ -8,7 +8,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 - A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm run check:licences`).
 - The README states that the agent image installs Claude Code, which is proprietary software from Anthropic, and that orch itself is MIT.
-- The maintenance leader now deletes old rows in bounded batches: audit entries (`RETENTION_AUDIT_DAYS`, 365), webhook delivery ids (`RETENTION_WEBHOOK_DAYS`, 30), offers that never started (`RETENTION_ASSIGNMENT_DAYS`, 90), and sessions and enrollment tokens expired for `RETENTION_EXPIRED_DAYS` (7). 0 keeps a table forever. The audit log stays append-only: only the new `audit_log_purge()` SQL function can delete, and only past the retention. Purged rows are counted by `orch_retention_purged_rows_total{table}`.
+- The maintenance leader now deletes old rows in bounded batches: audit entries (`RETENTION_AUDIT_DAYS`, 365), webhook delivery ids (`RETENTION_WEBHOOK_DAYS`, 30), offers that never started (`RETENTION_ASSIGNMENT_DAYS`, 90), and sessions and enrollment tokens expired for `RETENTION_EXPIRED_DAYS` (7). 0 keeps a table forever. The audit log keeps its trigger: rows younger than 30 days cannot be deleted or modified, whatever the retention setting, and TRUNCATE is refused. Older rows can be deleted, normally by the retention purge (`audit_log_purge()`); the table owner can still disable triggers. `RETENTION_AUDIT_DAYS` must be 0 or at least 30. The migration builds indexes on `AuditLog`, `Session`, `EnrollmentToken` and `Assignment`, which can take a few seconds on a large audit log (writes to the table wait meanwhile). Purged rows are counted by `orch_retention_purged_rows_total{table}`.
 
 ### Changed
 

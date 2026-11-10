@@ -164,6 +164,8 @@ docker compose pull && docker compose up -d     # or: docker compose up -d --bui
 
 **Moving from `ghcr.io/theroxat` (servers on v0.9.0 or older).** Releases after v0.9.0 are published only as `ghcr.io/selfhostr/orch-server`, `orch-web` and `orch-agent`; `deploy/server/compose.yaml` now uses those names. If `.env` pins `ORCH_VERSION` to an old release, set it to the new one before `docker compose pull`, and remove any `ORCH_AGENT_IMAGE_REPO=ghcr.io/theroxat/orch-agent` override (the default is now `ghcr.io/selfhostr/orch-agent`). Agents from v0.9.0 and older must be switched once by hand, see {ref}`updating-agents`.
 
+Some releases add database indexes while the server starts (the retention release does, on `AuditLog`, `Session`, `EnrollmentToken` and `Assignment`). On a very large audit log this can take a few seconds, during which writes to that table wait.
+
 Members upgrade their agent with `docker compose -f ~/orch/compose.yaml pull && docker compose -f ~/orch/compose.yaml up -d`, or with one click, see {ref}`updating-agents`.
 
 ## Backups and restore

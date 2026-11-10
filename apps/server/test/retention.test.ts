@@ -279,6 +279,35 @@ describe('retention purge', () => {
     await expect(prisma.$queryRaw`SELECT audit_log_purge(29, 10)`).rejects.toThrow();
   });
 
+  it('the 30 day floor does not depend on the session time zone, and TRUNCATE is refused', async () => {
+    const tag = uid();
+    const rows = await prisma.auditLog.createManyAndReturn({
+      data: [
+        { actorType: 'SYSTEM', action: `ret.${tag}.now` },
+        { actorType: 'SYSTEM', action: `ret.${tag}.10d`, at: ago(10) },
+        { actorType: 'SYSTEM', action: `ret.${tag}.29d`, at: ago(29) },
+      ],
+    });
+    const ids = rows.map((r) => r.id);
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL TimeZone = '<+167>-167'`);
+        await tx.$executeRaw`SELECT set_config('orch.audit_purge_before', '2100-01-01', true)`;
+        await tx.$executeRaw`DELETE FROM "AuditLog" WHERE id = ANY(${ids}::bigint[])`;
+      }),
+    ).rejects.toThrow(/append-only/);
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL TimeZone = '<-167>+167'`);
+        await tx.$executeRaw`SELECT set_config('orch.audit_purge_before', '2100-01-01', true)`;
+        await tx.$executeRaw`DELETE FROM "AuditLog" WHERE id = ANY(${ids}::bigint[])`;
+      }),
+    ).rejects.toThrow(/append-only/);
+    expect(await prisma.auditLog.count({ where: { id: { in: ids } } })).toBe(3);
+    await expect(prisma.$executeRawUnsafe(`TRUNCATE "AuditLog"`)).rejects.toThrow(/append-only/);
+    expect(await prisma.auditLog.count({ where: { id: { in: ids } } })).toBe(3);
+  });
+
   it('two concurrent passes purge in batches without getting in each other s way', async () => {
     const tag = uid();
     const N = 2500; // more than two batches
