@@ -48,7 +48,12 @@ export class FakeGithub implements GithubClient {
   /** Current login per GitHub account id (getLoginById); falls back to the signed-in users. */
   accounts = new Map<number, string | null>();
   failAccounts = false;
+  /** getLoginById never answers (GitHub hangs). */
+  hangAccounts = false;
+  accountCalls = 0;
   async getLoginById(githubId: number): Promise<string | null> {
+    this.accountCalls++;
+    if (this.hangAccounts) return new Promise<string | null>(() => {});
     if (this.failAccounts) throw new Error('github down');
     if (this.accounts.has(githubId)) return this.accounts.get(githubId) ?? null;
     let login: string | null = null;

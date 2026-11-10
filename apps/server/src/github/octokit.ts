@@ -117,12 +117,17 @@ export class OctokitGithubClient implements GithubClient {
     return { id: data.id, login: data.login, name: data.name, avatarUrl: data.avatar_url };
   }
 
-  async getLoginById(githubId: number): Promise<string | null> {
+  async getLoginById(githubId: number, installationId?: number): Promise<string | null> {
+    // An App JWT cannot read users: an installation token can (unauthenticated as a fallback).
+    const octokit =
+      installationId !== undefined
+        ? this.forInstallation(installationId)
+        : new Octokit({ baseUrl: this.baseUrl });
     try {
-      const { data } = await new Octokit({ baseUrl: this.baseUrl }).request(
-        'GET /user/{account_id}',
-        { account_id: githubId },
-      );
+      const { data } = await octokit.request('GET /user/{account_id}', {
+        account_id: githubId,
+        request: { signal: AbortSignal.timeout(5000) },
+      });
       return (data as { login?: string }).login ?? null;
     } catch (err) {
       if ((err as { status?: number }).status === 404) return null;

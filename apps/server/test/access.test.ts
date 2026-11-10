@@ -679,6 +679,20 @@ describe('precedence', () => {
   });
 });
 
+const bindingOf = (kind: 'ADMIN' | 'ALLOWED', login: string) =>
+  prisma.envLoginBinding.findUnique({
+    where: { kind_githubLogin: { kind, githubLogin: login } },
+  });
+
+async function eventually(cond: () => Promise<boolean>, ms = 10_000): Promise<void> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (await cond()) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error('condition not met in time');
+}
+
 describe('env logins and decisions follow the GitHub account id', () => {
   /** The account renames itself on GitHub and signs in again under the new login. */
   async function rename(a: FastifyInstance, from: string): Promise<{ to: string; s: Signed }> {
@@ -778,21 +792,14 @@ describe('env logins and decisions follow the GitHub account id', () => {
     gh.accounts.set(Number(githubId), root); // GitHub confirms the account still has the login
     const a = newApp({ ORCH_ADMIN_GITHUB_LOGINS: root.toUpperCase() });
     await a.ready();
-    const b = await prisma.envLoginBinding.findUniqueOrThrow({
-      where: { kind_githubLogin: { kind: 'ADMIN', githubLogin: root } },
-    });
-    expect(b.githubUserId).toBe(githubId);
+    // Bound in the background (startup does not wait for GitHub).
+    await eventually(async () => (await bindingOf('ADMIN', root))?.githubUserId === githubId);
     // That admin signs in normally; another account under that login does not.
     ids.set(root, Number(githubId));
     const s = await signIn(a, root);
     expect(s.status).toBe(302);
     expect((await as(a, s.cookie)('GET', '/api/me')).json()).toMatchObject({ isAdmin: true });
   });
-
-  const bindingOf = (kind: 'ADMIN' | 'ALLOWED', login: string) =>
-    prisma.envLoginBinding.findUnique({
-      where: { kind_githubLogin: { kind, githubLogin: login } },
-    });
 
   it('a stale User row is not bound at startup; the real holder binds at sign-in, no 500', async () => {
     const root = `stale-${uid()}`;
@@ -821,6 +828,48 @@ describe('env logins and decisions follow the GitHub account id', () => {
     const old = await prisma.user.findUniqueOrThrow({ where: { githubId: BigInt(oldId) } });
     expect(old.login).toBe(`former~${oldId}`);
   });
+
+  it('GitHub never answers at startup: the server starts and open sessions of listed logins keep working; a "no" refuses', async () => {
+    const root = `slow-${uid()}`;
+    const listed = `slowlist-${uid()}`;
+    // Sessions opened while these logins were not listed: nothing bound.
+    const open = newApp({ ORCH_ALLOW_ANY_GITHUB_USER: 'true' });
+    const admin = await signIn(open, root);
+    const member = await signIn(open, listed);
+    gh.hangAccounts = true;
+    try {
+      const env = { ORCH_ADMIN_GITHUB_LOGINS: root, ORCH_ALLOWED_GITHUB_LOGINS: listed };
+      const a = newApp(env);
+      const t0 = Date.now();
+      await a.ready();
+      expect(Date.now() - t0).toBeLessThan(3000);
+      // GitHub cannot say (5 s timeout): the decision by login applies, nothing is bound.
+      expect((await as(a, admin.cookie)('GET', '/api/me')).json()).toMatchObject({
+        isAdmin: true,
+      });
+      expect((await as(a, member.cookie)('GET', '/api/me')).statusCode).toBe(200);
+      expect(await bindingOf('ADMIN', root)).toBeNull();
+      // Not asked again on every request.
+      const calls = gh.accountCalls;
+      expect((await as(a, admin.cookie)('GET', '/api/me')).statusCode).toBe(200);
+      expect(gh.accountCalls).toBe(calls);
+
+      // GitHub answers: the admin's account has another login now (stale row): refused.
+      // The member's account still has its login: bound.
+      gh.hangAccounts = false;
+      gh.accounts.set(admin.githubId, `elsewhere-${uid()}`);
+      gh.accounts.set(member.githubId, listed);
+      const b = newApp(env);
+      expect((await as(b, admin.cookie)('GET', '/api/me')).statusCode).toBe(401);
+      expect((await as(b, member.cookie)('GET', '/api/me')).statusCode).toBe(200);
+      await eventually(
+        async () => (await bindingOf('ALLOWED', listed))?.githubUserId === BigInt(member.githubId),
+      );
+      expect(await bindingOf('ADMIN', root)).toBeNull();
+    } finally {
+      gh.hangAccounts = false;
+    }
+  }, 40_000);
 
   it('a login removed from the variable gives nothing any more; listed again, the binding applies', async () => {
     const root = `gone-${uid()}`;
@@ -898,6 +947,23 @@ describe('env logins and decisions follow the GitHub account id', () => {
       githubUserId: String(ids.get(ADMIN)),
     });
     expect(bindings.some((b) => b.kind === 'ALLOWED')).toBe(false);
+  });
+});
+
+describe('rate limit of the OAuth callback', () => {
+  it('the callback is in the auth tier: 429 once the limit is passed', async () => {
+    const a = newApp({ RATE_LIMIT_AUTH_MAX: '3' });
+    const codes: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const res = await a.inject({
+        method: 'GET',
+        url: `/api/auth/github/callback?code=c${i}&state=s`,
+        headers: { cookie: 'orch_oauth_state=other' },
+      });
+      codes.push(res.statusCode);
+    }
+    expect(codes.slice(0, 3)).toEqual([400, 400, 400]);
+    expect(codes.slice(3)).toEqual([429, 429]);
   });
 });
 

@@ -249,10 +249,77 @@ export function createAllowlist(deps: AuthDeps, log?: WarnLog): Allowlist {
     return githubId;
   }
 
+  // ---- checking on GitHub that an account still has a listed login (stale User rows) ----
+  const VERIFY_TIMEOUT_MS = 5000;
+  /** After GitHub failed to answer, it is not asked again for that account for this long. */
+  const VERIFY_RETRY_MS = 60_000;
+  /** A "this account no longer has that login" answer is reused for this long. */
+  const REFUTED_TTL_MS = 10 * 60_000;
+  type Verdict = 'yes' | 'no' | 'unknown';
+  const verdicts = new Map<string, { v: Verdict; at: number }>(); // `login:githubId`
+  const verifying = new Map<string, Promise<Verdict>>();
+
+  async function askGithub(login: string, githubId: bigint): Promise<Verdict> {
+    if (!deps.github) return 'unknown';
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      // Any active installation's token: a far higher rate limit than anonymous calls.
+      const inst = await prisma.installation.findFirst({
+        where: { suspendedAt: null },
+        orderBy: { createdAt: 'asc' },
+        select: { githubInstallationId: true },
+      });
+      const current = await Promise.race([
+        deps.github.getLoginById(
+          Number(githubId),
+          inst ? Number(inst.githubInstallationId) : undefined,
+        ),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('GitHub timed out')), VERIFY_TIMEOUT_MS);
+        }),
+      ]);
+      if (current?.toLowerCase() === login) return 'yes';
+      log?.warn(
+        { login, githubUserId: githubId.toString(), current },
+        'This account no longer has the listed GitHub login it was stored with: right refused',
+      );
+      return 'no';
+    } catch (err) {
+      log?.warn(
+        { login, githubUserId: githubId.toString(), err },
+        'Could not check a listed GitHub login on GitHub: the last decision by login applies until it can',
+      );
+      return 'unknown';
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Does this account still have this login on GitHub? Cached; one call in flight per pair. */
+  async function verifyLogin(login: string, githubId: bigint): Promise<Verdict> {
+    const key = `${login}:${githubId}`;
+    const hit = verdicts.get(key);
+    const age = hit ? Date.now() - hit.at : Infinity;
+    if (hit?.v === 'no' && age < REFUTED_TTL_MS) return 'no';
+    if (hit?.v === 'unknown' && age < VERIFY_RETRY_MS) return 'unknown';
+    let p = verifying.get(key);
+    if (!p) {
+      p = askGithub(login, githubId);
+      verifying.set(key, p);
+      p.finally(() => verifying.delete(key)).catch(() => undefined);
+    }
+    const v = await p;
+    verdicts.set(key, { v, at: Date.now() });
+    return v;
+  }
+
   /**
    * Whether an env list gives this account its right: its login is listed and bound to it, or it
-   * was bound under a listed login and renamed since. An unbound listed login is bound only when
-   * `verified` (the login comes from GitHub at sign-in, not from a possibly stale User row).
+   * was bound under a listed login and renamed since. An unbound listed login is bound at once
+   * when `verified` (the login comes from GitHub at sign-in). Otherwise (an open session, whose
+   * stored login may be stale) GitHub is asked whether the account still has it: yes binds it,
+   * no refuses the right, and while GitHub cannot answer the decision by login applies, as
+   * before logins were bound (a GitHub outage does not lock the team out).
    */
   async function envRight(
     kind: EnvLoginKind,
@@ -264,8 +331,12 @@ export function createAllowlist(deps: AuthDeps, log?: WarnLog): Allowlist {
     if (list.length === 0) return false;
     const lower = login.toLowerCase();
     if (list.includes(lower)) {
-      const owner =
-        (await bindingOf(kind, lower)) ?? (verified ? await claim(kind, lower, githubId) : null);
+      let owner = await bindingOf(kind, lower);
+      if (owner === null) {
+        const v = verified ? 'yes' : await verifyLogin(lower, githubId);
+        if (v === 'yes') owner = await claim(kind, lower, githubId);
+        else if (v === 'unknown') return true;
+      }
       if (owner === githubId) return true;
     }
     const key = `${kind}:${githubId}`;
@@ -295,25 +366,9 @@ export function createAllowlist(deps: AuthDeps, log?: WarnLog): Allowlist {
           select: { githubId: true },
         });
         if (!user) continue;
-        let current: string | null;
-        try {
-          if (!deps.github) throw new Error('GitHub App is not configured');
-          current = await deps.github.getLoginById(Number(user.githubId));
-        } catch (err) {
-          log?.warn(
-            { kind, login, githubUserId: user.githubId.toString(), err },
-            'Could not check a listed GitHub login on GitHub: not bound, the next sign-in binds it',
-          );
-          continue;
+        if ((await verifyLogin(login, user.githubId)) === 'yes') {
+          await claim(kind, login, user.githubId);
         }
-        if (current?.toLowerCase() !== login) {
-          log?.warn(
-            { kind, login, githubUserId: user.githubId.toString(), current },
-            'The user stored with a listed GitHub login no longer has it: not bound',
-          );
-          continue;
-        }
-        await claim(kind, login, user.githubId);
       }
     }
   }
@@ -421,7 +476,12 @@ export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
   }
   const allowlist = createAllowlist(deps, app.log);
   app.decorate('allowlist', allowlist);
-  app.addHook('onReady', async () => allowlist.bindExisting());
+  // Not awaited: a slow or unreachable GitHub must not keep the server from starting.
+  app.addHook('onReady', async () => {
+    allowlist
+      .bindExisting()
+      .catch((err: unknown) => app.log.warn({ err }, 'Binding the listed GitHub logins failed'));
+  });
   const base = new URL(config.ORCH_BASE_URL);
   const secure = base.protocol === 'https:';
   const redirectUri = `${base.origin}/api/auth/github/callback`;
