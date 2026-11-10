@@ -7,6 +7,8 @@ export default {
     rejected: 'Demande d’autorisation rejetée',
     title: 'Autoriser {client}',
     body: '<strong>{client}</strong> (redirection vers <code>{host}</code>) veut utiliser les outils MCP d’orch (consulter le pool, lister, soumettre et prendre des tâches) en tant que <strong>{login}</strong>.',
+    redirect:
+      'Après approbation, ton navigateur et le code d’accès partent vers <strong>{host}</strong>. Refuser si cette adresse est inconnue.',
     warning: 'N’approuver que si cette demande vient d’être lancée depuis Claude Code.',
     approve: 'Approuver',
     deny: 'Refuser',

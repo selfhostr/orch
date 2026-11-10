@@ -12,6 +12,19 @@ import type {
   GithubUserInfo,
   InstallationTokenScope,
 } from './client';
+import { PullRequestExistsError } from './client';
+
+/** The 422 GitHub answers when an open pull request already has the same head and base. */
+export function isPullRequestExists(err: unknown): boolean {
+  const e = err as {
+    status?: number;
+    message?: string;
+    response?: { data?: { errors?: Array<{ message?: string }> } };
+  };
+  if (e.status !== 422) return false;
+  const texts = [e.message ?? '', ...(e.response?.data?.errors ?? []).map((x) => x.message ?? '')];
+  return texts.some((t) => /a pull request already exists/i.test(t));
+}
 
 export interface OctokitGithubOptions {
   appId: string;
@@ -34,6 +47,35 @@ const ROLES: Record<string, GithubRole> = {
 
 export function mapGithubRoleName(name: string | null | undefined): GithubRole {
   return (name && ROLES[name]) || 'NONE';
+}
+
+/**
+ * Role from a collaborator permission answer. A custom organization role has a `role_name`
+ * orch does not know: fall back to the rights GitHub reports (`user.permissions`), then to the
+ * legacy `permission` (admin, write, read, none).
+ */
+export function roleFromPermission(data: {
+  role_name?: string | null;
+  permission?: string | null;
+  user?: {
+    permissions?: {
+      admin?: boolean;
+      maintain?: boolean;
+      push?: boolean;
+      triage?: boolean;
+      pull?: boolean;
+    } | null;
+  } | null;
+}): GithubRole {
+  const named = mapGithubRoleName(data.role_name);
+  if (named !== 'NONE') return named;
+  const p = data.user?.permissions;
+  if (p?.admin) return 'ADMIN';
+  if (p?.maintain) return 'MAINTAIN';
+  if (p?.push) return 'WRITE';
+  if (p?.triage) return 'TRIAGE';
+  if (p?.pull) return 'READ';
+  return mapGithubRoleName(data.permission);
 }
 
 function splitFullName(fullName: string): { owner: string; repo: string } {
@@ -117,6 +159,24 @@ export class OctokitGithubClient implements GithubClient {
     return { id: data.id, login: data.login, name: data.name, avatarUrl: data.avatar_url };
   }
 
+  async getLoginById(githubId: number, installationId?: number): Promise<string | null> {
+    // An App JWT cannot read users: an installation token can (unauthenticated as a fallback).
+    const octokit =
+      installationId !== undefined
+        ? this.forInstallation(installationId)
+        : new Octokit({ baseUrl: this.baseUrl });
+    try {
+      const { data } = await octokit.request('GET /user/{account_id}', {
+        account_id: githubId,
+        request: { signal: AbortSignal.timeout(5000) },
+      });
+      return (data as { login?: string }).login ?? null;
+    } catch (err) {
+      if ((err as { status?: number }).status === 404) return null;
+      throw err;
+    }
+  }
+
   async isOrgMember(accessToken: string, org: string): Promise<boolean> {
     try {
       const { data } = await this.userClient(
@@ -171,7 +231,7 @@ export class OctokitGithubClient implements GithubClient {
       const { data } = await this.forInstallation(
         installationId,
       ).rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: login });
-      return mapGithubRoleName(data.role_name);
+      return roleFromPermission(data);
     } catch (err) {
       if ((err as { status?: number }).status === 404) return 'NONE';
       throw err;
@@ -237,16 +297,52 @@ export class OctokitGithubClient implements GithubClient {
     input: CreatePullRequestInput,
   ): Promise<{ number: number; htmlUrl: string }> {
     const { owner, repo } = splitFullName(fullName);
-    const { data } = await this.forInstallation(installationId).rest.pulls.create({
+    try {
+      const { data } = await this.forInstallation(installationId).rest.pulls.create({
+        owner,
+        repo,
+        head: input.head,
+        base: input.base,
+        title: input.title,
+        body: input.body,
+        draft: input.draft,
+      });
+      return { number: data.number, htmlUrl: data.html_url };
+    } catch (err) {
+      if (isPullRequestExists(err)) throw new PullRequestExistsError();
+      throw err;
+    }
+  }
+
+  async findOpenPullRequest(
+    installationId: number,
+    fullName: string,
+    head: string,
+    base: string,
+  ): Promise<{ number: number; htmlUrl: string } | null> {
+    const { owner, repo } = splitFullName(fullName);
+    const { data } = await this.forInstallation(installationId).rest.pulls.list({
       owner,
       repo,
-      head: input.head,
-      base: input.base,
-      title: input.title,
-      body: input.body,
-      draft: input.draft,
+      head: `${owner}:${head}`,
+      base,
+      state: 'open',
+      per_page: 1,
     });
-    return { number: data.number, htmlUrl: data.html_url };
+    const pr = data[0];
+    return pr ? { number: pr.number, htmlUrl: pr.html_url } : null;
+  }
+
+  async closePullRequest(
+    installationId: number,
+    fullName: string,
+    number: number,
+    comment: string,
+  ): Promise<void> {
+    const { owner, repo } = splitFullName(fullName);
+    const api = this.forInstallation(installationId).rest;
+    await api.issues.createComment({ owner, repo, issue_number: number, body: comment });
+    await api.pulls.update({ owner, repo, pull_number: number, state: 'closed' });
   }
 
   async getBranchSha(

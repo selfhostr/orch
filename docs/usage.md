@@ -6,7 +6,7 @@ By the end, you know how to run, follow and review tasks from the web app and th
 
 Issues carrying the project's pool label (default `pool`) become tasks.
 
-- **Backlog** shows tasks by status. New tasks can also be created here.
+- **Backlog** shows tasks by status. New tasks can also be created here, and a task that has not started can be cancelled ([below](#cancel-a-task)).
 - **History** searches every task that has run ([below](#task-history)).
 - **Pool** shows teammates' availability (estimates).
 - **Usage** charts tokens and task runs over time ({ref}`usage-dashboard`).
@@ -15,6 +15,16 @@ Issues carrying the project's pool label (default `pool`) become tasks.
 - **My Server** manages your agent: install command, status, updates.
 - **Claude Code** shows the MCP command for your domain and the connected apps ({doc}`mcp`).
 - **Access** (`/admin/access`, admins only) manages who can sign in.
+
+## Cancel a task
+
+A task that has not started (Proposed or To do, including a Blocked one) shows a **Cancel** button on its Backlog card, after you confirm. Only the project owner and the person who created the task see it. The task leaves the board, pending offers to teammates' machines are withdrawn, and the change is recorded in the audit log.
+
+A task that is already running or in review cannot be cancelled from the Backlog. Cancelling does not touch the GitHub issue: close it yourself if you want it closed. Closing the issue on GitHub also cancels a task that has not started.
+
+Tasks that depend on a cancelled task stay Blocked, because a cancelled task never completes. The confirmation dialog lists them. To unblock one, remove the cancelled task from its dependencies (`PATCH /api/tasks/:id` with a new `dependsOn`).
+
+To undo a cancellation, close the GitHub issue and reopen it: the task comes back as Proposed and needs approval again.
 
 ## Language
 

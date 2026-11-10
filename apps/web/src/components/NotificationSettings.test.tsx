@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { me, mockApi, renderApp, switchToFrench, type Routes } from '../test/helpers';
 
@@ -139,6 +139,14 @@ describe('notification settings', () => {
     expect(await screen.findByText('••••abcd')).toBeTruthy();
     expect(screen.queryByText(shown)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }));
+    // Rotation asks first; keeping the secret sends nothing.
+    const dialog = await screen.findByRole('dialog', { name: 'Rotate signing secret' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Rotate signing secret' });
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Rotate secret' }));
     expect(await screen.findByText(shown)).toBeTruthy();
     expect(screen.getByRole('button', { name: /Copy secret/ })).toBeTruthy();
     expect(calls.some((c) => c.method === 'POST')).toBe(true);

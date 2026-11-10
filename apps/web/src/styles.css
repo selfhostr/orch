@@ -1205,11 +1205,14 @@ ul.plain li {
   border: 1px solid var(--rule);
   border-radius: 16px;
   box-shadow: var(--lift);
-  outline: none;
   overscroll-behavior: contain;
   transition:
     transform 0.32s var(--ease-out),
     opacity 0.2s;
+}
+.modal:focus-visible {
+  outline: 2px solid var(--route);
+  outline-offset: -2px;
 }
 .modal.wide {
   width: min(680px, 100%);
@@ -3019,8 +3022,9 @@ textarea.mono,
   transform-origin: calc(100% - 18px) 0;
   animation: bell-in 220ms var(--ease-out);
 }
-.bell-panel:focus {
-  outline: none;
+.bell-panel:focus-visible {
+  outline: 2px solid var(--route);
+  outline-offset: -2px;
 }
 .bell-panel[data-closing] {
   animation: bell-out 200ms var(--ease-in) forwards;

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import {
   approveTask,
+  cancelTask,
   fetchDiscover,
   fetchMyProjects,
   fetchTaskBoard,
@@ -13,6 +14,7 @@ import {
 import { NewTaskDialog, type BoardProject } from '../components/NewTaskDialog';
 import { POLL_MS } from '../time';
 import { TaskCard } from '../components/TaskCard';
+import { Modal, closeModal } from '../ui/Modal';
 import { presenceProps, usePresence } from '../ui/presence';
 import { useToast } from '../ui/Toast';
 import { errorMessage } from '../i18n/errors.ts';
@@ -27,6 +29,7 @@ function Column({
   onApprove,
   retrying,
   onRetry,
+  onCancel,
   focusId,
 }: {
   status: TaskStatus;
@@ -37,6 +40,7 @@ function Column({
   onApprove: (id: string) => void;
   retrying: boolean;
   onRetry: (id: string) => void;
+  onCancel: (task: TaskView) => void;
   focusId: string | null;
 }) {
   const t = useT();
@@ -58,6 +62,7 @@ function Column({
             onApprove={onApprove}
             retrying={retrying}
             onRetry={onRetry}
+            onCancel={onCancel}
             highlighted={task.id === focusId}
           />
         </div>
@@ -107,6 +112,17 @@ export function Backlog() {
     mutationFn: retryTask,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
   });
+  const [toCancel, setToCancel] = useState<TaskView | null>(null);
+  const cancel = useMutation({
+    mutationFn: (task: TaskView) => cancelTask(task.id),
+    onSuccess: async (_r, task) => {
+      toast(t('backlog.page.cancelled', { number: String(task.issueNumber) }));
+      closeModal(() => setToCancel(null));
+      await qc.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    // A 409 means the task moved on: refresh so the card loses its button.
+    onError: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
+  });
   const imp = useMutation({
     mutationFn: importTasks,
     onSuccess: async (r) => {
@@ -132,6 +148,9 @@ export function Backlog() {
     ? canCreateIn(access[filter])
     : projects.some((p) => canCreateIn(access[p.id]));
   const allTasks: TaskView[] = board.data ? COLUMNS.flatMap((c) => board.data[c.status]) : [];
+  const dependents = toCancel
+    ? allTasks.filter((x) => x.dependsOn.some((d) => d.id === toCancel.id))
+    : [];
   const focusMissing = !!focusId && !!board.data && !allTasks.some((x) => x.id === focusId);
 
   return (
@@ -197,10 +216,46 @@ export function Backlog() {
               onApprove={(id) => approve.mutate(id)}
               retrying={retry.isPending}
               onRetry={(id) => retry.mutate(id)}
+              onCancel={(task) => {
+                cancel.reset();
+                setToCancel(task);
+              }}
               focusId={focusId}
             />
           ))}
         </div>
+      )}
+      {toCancel && (
+        <Modal
+          label={t('backlog.cancel.label')}
+          title={t('backlog.cancel.title', { number: String(toCancel.issueNumber) })}
+          onClose={() => setToCancel(null)}
+          closeButton={false}
+          tone="danger"
+        >
+          <p>{t('backlog.cancel.body', { title: toCancel.title })}</p>
+          {dependents.length > 0 && (
+            <p className="warning">
+              {t('backlog.cancel.dependents', {
+                count: dependents.length,
+                list: dependents.map((d) => `#${d.issueNumber}`).join(', '),
+              })}
+            </p>
+          )}
+          {cancel.error && <p className="error">{errorMessage(cancel.error)}</p>}
+          <div className="modal-actions">
+            <button onClick={() => closeModal(() => setToCancel(null))}>
+              {t('backlog.cancel.keep')}
+            </button>
+            <button
+              className="danger solid"
+              disabled={cancel.isPending}
+              onClick={() => cancel.mutate(toCancel)}
+            >
+              {t('backlog.cancel.confirm')}
+            </button>
+          </div>
+        </Modal>
       )}
       {creating && (
         <NewTaskDialog

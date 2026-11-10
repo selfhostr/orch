@@ -11,6 +11,26 @@ export default {
     preApprove: 'Pre-approve',
     createInvite: 'Create invite link',
   },
+  confirm: {
+    remove: {
+      label: 'Remove member',
+      title: 'Remove {login}?',
+      body: 'Remove {login}? This denies their access to the server until an admin approves them again.',
+      action: 'Remove member',
+    },
+    deny: {
+      label: 'Deny request',
+      title: 'Deny {login}?',
+      body: 'The request is declined. The person can be approved later from the declined list.',
+      action: 'Deny request',
+    },
+    revokeInvite: {
+      label: 'Revoke invite link',
+      title: 'Revoke this invite link?',
+      body: 'Nobody can sign up with this link any more. This cannot be undone.',
+      action: 'Revoke link',
+    },
+  },
   pending: {
     title: 'Pending requests',
     none: 'No pending requests.',
@@ -20,8 +40,6 @@ export default {
     none: 'No approved members yet.',
     approvedBy: 'approved by {name}',
     addLogin: 'Add a GitHub login',
-    confirmRemove:
-      'Remove {login}? This denies their access to the server until an admin approves them again.',
   },
   invites: {
     title: 'Invite links',
@@ -55,6 +73,8 @@ export default {
     logins: 'Logins',
     orgs: 'Organizations',
     admins: 'Admins',
+    bound: 'GitHub account {id}',
+    unbound: 'not bound yet: the first sign-in with this login binds it',
     none: 'none',
   },
   declined: 'Declined ({count})',

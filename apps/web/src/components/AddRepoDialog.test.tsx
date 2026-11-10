@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { mockApi, me, renderApp } from '../test/helpers';
 
 const URL = 'https://github.com/apps/orch/installations/new';
@@ -89,7 +89,6 @@ describe('Add repository onboarding', () => {
       },
       'GET /repos/available': () => ({ json: [repo(!removed)] }),
     });
-    vi.stubGlobal('confirm', () => true);
     renderApp('/projects');
     fireEvent.click(await screen.findByRole('button', { name: 'Add repository' }));
     let dialog = await screen.findByRole('dialog', { name: 'Add repository' });
@@ -98,6 +97,8 @@ describe('Add repository onboarding', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
     fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Remove project' });
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Remove project' }));
     await screen.findByText('Add your first repository to the pool');
     fireEvent.click(screen.getByRole('button', { name: 'Add repository' }));
     dialog = await screen.findByRole('dialog', { name: 'Add repository' });

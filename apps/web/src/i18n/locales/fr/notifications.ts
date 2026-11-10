@@ -113,6 +113,10 @@ export default {
       docs: 'Vérifier les signatures',
       previous: 'L’ancien secret signe aussi jusqu’au {date}.',
       generated: 'Nouveau secret de signature généré',
+      rotateLabel: 'Renouveler le secret de signature',
+      rotateTitle: 'Renouveler le secret de signature ?',
+      rotateBody:
+        'Un nouveau secret est généré et affiché une seule fois. L’ancien continue de signer pendant un court moment, puis les récepteurs qui l’utilisent encore échouent à la vérification.',
       rotateFailed: 'Impossible de renouveler le secret',
       revealTitle: 'Secret de signature du webhook',
       revealHint:

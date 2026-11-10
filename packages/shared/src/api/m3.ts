@@ -91,6 +91,8 @@ export const TaskViewSchema = z.object({
   canEdit: z.boolean(),
   /** The caller may approve it (PROPOSED, and caller is a submitter or the owner). */
   canApprove: z.boolean(),
+  /** The caller may cancel it (creator or project owner; PROPOSED/TODO tasks, not started). */
+  canCancel: z.boolean().optional(),
   /** M4 (additive): dispatch targeting. */
   dispatch: DispatchViewSchema.optional(),
   /** v0.5.1 (additive): FAILED runs since the last retry (or ever). */
@@ -121,6 +123,7 @@ export const BlockReasonCode = z.enum([
   'project_unavailable',
   'pending_offer',
   'no_member',
+  'no_writer',
   // member-level
   'not_targeted',
   'member_paused',

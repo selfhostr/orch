@@ -15,6 +15,7 @@ export default {
     rate_limited: 'Rate limit',
     timeout: 'Timeout',
     task: 'Task failed',
+    access: 'No write access',
   },
   columns: {
     status: 'Status',

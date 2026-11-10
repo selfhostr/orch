@@ -14,6 +14,7 @@ export default {
       other: '{count} tickets importés (déjà importés : {already}).',
     },
     approved: '#{number} approuvée et déplacée dans À faire',
+    cancelled: '#{number} annulée',
     notOnBoard:
       'Cette tâche n’est pas sur le tableau (elle appartient peut-être à un projet inaccessible).',
     nothingHere: 'Rien ici',
@@ -44,13 +45,28 @@ export default {
     needsAttentionReason: 'Attention requise : {reason}',
     retry: 'Relancer',
     retryLabel: 'Relancer #{number}',
+    cancel: 'Annuler',
+    cancelLabel: 'Annuler #{number}',
     approve: 'Approuver',
     approveLabel: 'Approuver #{number}',
     takeIt: 'La prendre : <code>orch take {number}</code>',
   },
+  cancel: {
+    label: 'Annuler la tâche',
+    title: 'Annuler la tâche #{number} ?',
+    body: '{title} quittera le tableau et ne sera pas exécutée. L’issue GitHub reste ouverte.',
+    dependents: {
+      one: '{count} tâche dépend de celle-ci ({list}) et restera bloquée.',
+      other: '{count} tâches dépendent de celle-ci ({list}) et resteront bloquées.',
+    },
+    keep: 'Garder la tâche',
+    confirm: 'Annuler la tâche',
+  },
   why: {
     summary: 'Pourquoi ne démarre-t-elle pas ?',
     noParticipant: 'Aucun participant actif.',
+    noWriter:
+      'Aucun participant n’a l’accès en écriture à ce dépôt sur GitHub. Les tâches ne s’exécutent que chez les membres ayant l’accès Write, Maintain ou Admin.',
     eligible: 'éligible',
   },
   logs: {

@@ -5,6 +5,7 @@ export default {
   unknown: 'Une erreur est survenue.',
   network: 'Le serveur est injoignable. Vérifier la connexion, puis réessayer.',
   requestFailed: 'La requête a échoué ({status})',
+  requestFailedCode: 'La requête a échoué ({status}) : {code}',
   api: {
     access_suspended: 'L’accès à ce serveur a été retiré par un administrateur.',
     agent_offline: 'L’agent est hors ligne.',
@@ -20,9 +21,12 @@ export default {
       'Cet agent utilise encore l’ancienne image (ghcr.io/theroxat). Passez-le une fois à la main sur ghcr.io/selfhostr : voir « Updating agents » dans la documentation.',
     no_agent_online: 'La machine est hors ligne : démarrer d’abord l’agent.',
     not_participating: 'Tu ne participes plus à ce projet.',
+    not_cancellable: 'Cette tâche a déjà démarré et ne peut plus être annulée.',
     not_retryable: 'Cette tâche ne peut pas être relancée.',
     offer_closed: 'Cette demande n’est plus disponible : elle a été prise, retirée ou a expiré.',
     paused: 'L’agent est en pause : le reprendre d’abord dans Mon serveur.',
+    push_endpoint_taken:
+      'Ce navigateur reçoit déjà les notifications d’un autre membre : il doit d’abord les désactiver.',
     push_not_configured: 'Aucune clé VAPID n’est définie sur ce serveur.',
     server_version_unknown: 'Ce serveur exécute une version de développement.',
     task_cancelled: 'Cette tâche a été annulée.',
