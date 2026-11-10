@@ -6,6 +6,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Added
 
+- A task that has not started can be cancelled from the Backlog (`POST /api/tasks/:id/cancel`, project owner or task creator, with a confirmation dialog). `TaskView` gains `canCancel`.
 - The CI job "Licences and advisories" also runs `pnpm audit --prod --audit-level=high` (high and critical advisories in production dependencies fail the build).
 - A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm run check:licences`).
 - The README states that the agent image installs Claude Code, which is proprietary software from Anthropic, and that orch itself is MIT.

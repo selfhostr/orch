@@ -341,6 +341,70 @@ describe('backlog REST', () => {
   });
 });
 
+describe('cancel', () => {
+  it('owner and creator cancel a task that has not started; others and started tasks are refused', async () => {
+    const { owner, member, project, repo } = await world();
+    const a = await createTask(owner, project.id, { title: 'A' });
+    expect(
+      TaskViewSchema.parse((await api(app, owner)('GET', `/api/tasks/${a.id}`)).json()),
+    ).toMatchObject({
+      canCancel: true,
+    });
+    const asMember = TaskViewSchema.parse(
+      (await api(app, member)('GET', `/api/tasks/${a.id}`)).json(),
+    );
+    expect(asMember.canCancel).toBe(false);
+    expect((await api(app, member)('POST', `/api/tasks/${a.id}/cancel`)).statusCode).toBe(403);
+
+    // someone with no access to the project: 404, same answer as for a task that does not exist
+    const outsider = await loginAs(app, gh);
+    const hidden = await api(app, outsider)('POST', `/api/tasks/${a.id}/cancel`);
+    const missing = await api(app, outsider)('POST', '/api/tasks/nope/cancel');
+    expect(hidden.statusCode).toBe(404);
+    expect(hidden.json()).toEqual(missing.json());
+
+    // a pending offer is withdrawn with the task
+    const offer = await prisma.assignment.create({
+      data: {
+        taskId: a.id,
+        userId: member.userId,
+        kind: 'CONSENT_REQUEST',
+        status: 'PENDING',
+        expiresAt: new Date(Date.now() + 600_000),
+      },
+    });
+    const res = await api(app, owner)('POST', `/api/tasks/${a.id}/cancel`);
+    expect(res.statusCode, res.body).toBe(200);
+    expect(await prisma.assignment.findUniqueOrThrow({ where: { id: offer.id } })).toMatchObject({
+      status: 'CANCELLED',
+    });
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: a.id } })).status).toBe('CANCELLED');
+    expect(await prisma.auditLog.count({ where: { taskId: a.id, action: 'task.cancelled' } })).toBe(
+      1,
+    );
+    // already cancelled
+    expect((await api(app, owner)('POST', `/api/tasks/${a.id}/cancel`)).statusCode).toBe(409);
+
+    // a creator who is not the owner may cancel their own task
+    const creator = await loginAs(app, gh);
+    gh.roles.set(`${repo.installationId}:${repo.fullName}:${creator.login}`, 'WRITE');
+    await participate(creator, project.id);
+    const own = await createTask(creator, project.id, { title: 'Mine' });
+    expect(
+      TaskViewSchema.parse((await api(app, creator)('GET', `/api/tasks/${own.id}`)).json())
+        .canCancel,
+    ).toBe(true);
+    expect((await api(app, creator)('POST', `/api/tasks/${own.id}/cancel`)).statusCode).toBe(200);
+
+    const b = await createTask(owner, project.id, { title: 'B' });
+    await prisma.task.update({ where: { id: b.id }, data: { status: 'IN_PROGRESS' } });
+    expect((await api(app, owner)('POST', `/api/tasks/${b.id}/cancel`)).statusCode).toBe(409);
+    expect(
+      TaskViewSchema.parse((await api(app, owner)('GET', `/api/tasks/${b.id}`)).json()).canCancel,
+    ).toBe(false);
+  });
+});
+
 describe('claim', () => {
   it('claims atomically: the winner gets IN_PROGRESS and an offer', async () => {
     const { owner, project, repo, agent, member } = await world();

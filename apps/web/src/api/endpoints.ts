@@ -103,6 +103,8 @@ export const approveTask = (id: string) =>
 
 export const retryTask = (id: string) =>
   api('POST', `/tasks/${id}/retry`, { schema: TaskViewSchema });
+export const cancelTask = (id: string) =>
+  api('POST', `/tasks/${id}/cancel`, { schema: z.object({ ok: z.literal(true) }) });
 export const fetchWhyNotRunning = (id: string) =>
   api('GET', `/tasks/${id}/why-not-running`, { schema: WhyNotRunningResponseSchema });
 

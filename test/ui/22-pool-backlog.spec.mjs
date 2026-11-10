@@ -147,4 +147,13 @@ test('member alice: no "Everyone" option; rita proposes a task, owner approves i
   await o.getByRole('button', { name: 'Retry #6' }).click();
   await settle(o);
   await shot(o, 'backlog-after-retry');
+  // cancel: the dialog opens and keeping the task changes nothing
+  await o
+    .getByRole('button', { name: /^Cancel #/ })
+    .first()
+    .click();
+  const cancelDialog = o.getByRole('dialog', { name: 'Cancel task' });
+  await expect(cancelDialog).toBeVisible();
+  await cancelDialog.getByRole('button', { name: 'Keep task' }).click();
+  await expect(cancelDialog).toBeHidden();
 });
