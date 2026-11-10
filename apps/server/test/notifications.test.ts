@@ -31,6 +31,7 @@ import {
   type PostResult,
 } from '../src/notifications/ssrf';
 import {
+  giveRole,
   FakeGithub,
   TEST_WEBHOOK_SECRET,
   api,
@@ -206,6 +207,7 @@ async function onlineAgent(user: TestUser): Promise<Member> {
 
 async function member(projectId: string, mode: 'AUTO' | 'APPROVAL' = 'AUTO'): Promise<Member> {
   const u = await loginAs(app, gh);
+  await giveRole(gh, projectId, u.login);
   await prisma.participation.create({
     data: { userId: u.userId, projectId, active: true, approvedAt: new Date(), percent: 50, mode },
   });
@@ -431,9 +433,8 @@ describe('recipients who lost access', { timeout: 20_000 }, () => {
     const creator = await loginAs(app, gh);
     gh.roles.set(`4242:${repo.fullName}:${creator.login}`, 'WRITE');
     const m = await member(p.id);
-    // The runner can read the private repository (a participant without a GitHub role gets no
-    // offer on a private repository with the default policy).
-    gh.roles.set(`4242:${repo.fullName}:${m.user.login}`, 'READ');
+    // The runner has write access to the private repository (running a task needs it).
+    gh.roles.set(`4242:${repo.fullName}:${m.user.login}`, 'WRITE');
     const t = await createTask(creator, p.id, 'Secret thing');
     // The creator is removed from the repository; the cached role expires.
     gh.roles.set(`4242:${repo.fullName}:${creator.login}`, 'NONE');

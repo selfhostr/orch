@@ -14,7 +14,16 @@ import {
   type ServerMessage,
 } from '@orch/shared';
 import { sha256Hex } from '../src/auth/crypto';
-import { FakeGithub, api, loginAs, makeApp, prisma, repoFor, type TestUser } from './harness';
+import {
+  FakeGithub,
+  api,
+  giveRole,
+  loginAs,
+  makeApp,
+  prisma,
+  repoFor,
+  type TestUser,
+} from './harness';
 
 let gh: FakeGithub;
 let app: FastifyInstance;
@@ -134,6 +143,7 @@ async function report(m: Member, projectId: string) {
 }
 
 async function participate(u: TestUser, projectId: string, mode: 'AUTO' | 'APPROVAL' = 'AUTO') {
+  await giveRole(gh, projectId, u.login);
   await prisma.participation.create({
     data: { userId: u.userId, projectId, active: true, approvedAt: new Date(), percent: 50, mode },
   });

@@ -37,7 +37,7 @@ import type { Metrics } from '../observability';
 import type { Config } from '../config';
 import type { PrismaClient } from '../db';
 import type { GithubClient } from '../github';
-import { participationStatus, repoAccessAllows } from '../projects/service';
+import { mayRunTasks, participationStatus } from '../projects/service';
 import { buildPrompt } from '../tasks/service';
 import { branchNameFor, creatorOf } from '../tasks/meta';
 import {
@@ -537,20 +537,19 @@ export class Dispatcher {
   }
 
   /**
-   * Can the member still work on the task's repository? For a private one, GitHub must still let
-   * them in (see `repoAccessAllows`): once per (project, member) and tick, from the roles the
-   * snapshot read in one query; GitHub is only asked for a role whose cache expired.
+   * May the member run the task, i.e. push its branch? GitHub must give them write access to the
+   * repository, public or private (see `mayRunTasks`): once per (project, member) and tick, from
+   * the roles the snapshot read in one query; GitHub is only asked for a role whose cache expired.
    */
   private async repoAllowed(
     snap: TickSnapshot,
     task: DispatchTask,
     user: Participant['user'],
   ): Promise<boolean> {
-    if (!task.project.isPrivate) return true;
     const key = `${task.projectId}:${user.id}`;
     let ok = snap.repoAccess.get(key);
     if (ok === undefined) {
-      ok = await repoAccessAllows(this.prisma, this.deps.github, task.project, user, snap.roles);
+      ok = await mayRunTasks(this.prisma, this.deps.github, task.project, user, snap.roles);
       snap.repoAccess.set(key, ok);
     }
     return ok;
@@ -618,10 +617,7 @@ export class Dispatcher {
       return block('access_denied', 'Their access to this server could not be confirmed');
     }
     if (!(await this.repoAllowed(snap, task, p.user))) {
-      return block(
-        'access_denied',
-        'GitHub no longer gives them access to this private repository',
-      );
+      return block('access_denied', 'GitHub does not give them write access to this repository');
     }
     const usage = snap.latestUsage(p.userId);
     const state = usageState(usage, now, ctx.staleMs);
@@ -671,12 +667,38 @@ export class Dispatcher {
     if (task.status === 'TODO' && pending > 0) {
       taskReasons.push(block('pending_offer', 'Offered: waiting for an answer'));
     }
-    const members =
-      task.status === 'TODO'
-        ? await this.evaluateMembers(task, await this.snapshot([task], now), now)
-        : [];
+    const snap = task.status === 'TODO' ? await this.snapshot([task], now) : null;
+    const members = snap ? await this.evaluateMembers(task, snap, now) : [];
     if (task.status === 'TODO' && members.length === 0) {
       taskReasons.push(block('no_member', 'Nobody participates in this project yet'));
+    }
+    // Tasks only run for members with write access: say so when no participant has it.
+    // Counted among the members who could receive it: active participation, not paused, a
+    // connected machine that is not paused (a paused writer must not hide the explanation).
+    if (snap && members.length > 0) {
+      let receivers = 0;
+      let writer = false;
+      for (const p of snap.participantsOf(task.projectId)) {
+        if (participationStatus(p, task.project.requireParticipantApproval) !== 'active') continue;
+        if (p.user.paused) continue;
+        const ready = p.user.agents.some(
+          (a) => !a.revokedAt && !a.paused && this.gateway.isConnected(a.id),
+        );
+        if (!ready) continue;
+        receivers++;
+        if (await this.repoAllowed(snap, task, p.user)) {
+          writer = true;
+          break;
+        }
+      }
+      if (receivers > 0 && !writer) {
+        taskReasons.push(
+          block(
+            'no_writer',
+            'No participant has write access to this repository on GitHub: tasks only run for members with Write, Maintain or Admin',
+          ),
+        );
+      }
     }
     return {
       taskId,
@@ -1229,18 +1251,16 @@ export class Dispatcher {
     if (a.kind === 'AUTO_OFFER' && a.agentId !== (by.agentId ?? null)) {
       return refusal('not_found', 'No such offer');
     }
-    // Same repository access check as the offer: a member GitHub no longer lets into the private
-    // repository cannot start it, whatever offer is still open (cached role, see the dispatcher).
+    // Same check as the offer: a member without write access to the repository (any more)
+    // cannot start it, whatever offer is still open (cached role, see the dispatcher).
     const target = await prisma.task.findUniqueOrThrow({
       where: { id: a.taskId },
       include: { project: { include: { installation: true } } },
     });
-    if (target.project.isPrivate) {
-      const member = await prisma.user.findUniqueOrThrow({ where: { id: a.userId } });
-      if (!(await repoAccessAllows(prisma, this.deps.github, target.project, member))) {
-        await this.closePending([a], 'CANCELLED', 'access_denied', now);
-        return refusal('access_denied', 'GitHub no longer gives you access to this repository');
-      }
+    const member = await prisma.user.findUniqueOrThrow({ where: { id: a.userId } });
+    if (!(await mayRunTasks(prisma, this.deps.github, target.project, member))) {
+      await this.closePending([a], 'CANCELLED', 'access_denied', now);
+      return refusal('access_denied', 'GitHub does not give you write access to this repository');
     }
     let agentId = by.agentId ?? null;
     if (!agentId) {

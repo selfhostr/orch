@@ -51,6 +51,8 @@ export default {
   why: {
     summary: 'Pourquoi ne démarre-t-elle pas ?',
     noParticipant: 'Aucun participant actif.',
+    noWriter:
+      'Aucun participant n’a l’accès en écriture à ce dépôt sur GitHub. Les tâches ne s’exécutent que chez les membres ayant l’accès Write, Maintain ou Admin.',
     eligible: 'éligible',
   },
   logs: {

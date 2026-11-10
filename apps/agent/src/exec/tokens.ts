@@ -50,7 +50,7 @@ export class TokenBroker {
     this.pending.delete(m.payload.requestId);
     clearTimeout(p.timer);
     if (m.type === 'token.grant') p.resolve(m.payload.token);
-    else p.reject(new TokenError(`Token denied by the server: ${m.payload.reason}`));
+    else p.reject(new TokenError(tokenDeniedMessage(m.payload.reason)));
     return true;
   }
 
@@ -61,4 +61,12 @@ export class TokenBroker {
       this.pending.delete(id);
     }
   }
+}
+
+/** Error text of a refused token; the reason code stays in it (the server classifies it). */
+export function tokenDeniedMessage(reason: string): string {
+  if (reason === 'write_access_required') {
+    return 'Token denied by the server: write_access_required (GitHub no longer gives you write access to this repository, so the branch cannot be pushed)';
+  }
+  return `Token denied by the server: ${reason}`;
 }

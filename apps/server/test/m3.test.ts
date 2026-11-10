@@ -12,7 +12,16 @@ import {
 } from '@orch/shared';
 import { buildIssueBody } from '../src/tasks/meta';
 import { TaskService } from '../src/tasks/service';
-import { FakeGithub, api, loginAs, makeApp, prisma, repoFor, type TestUser } from './harness';
+import {
+  FakeGithub,
+  api,
+  giveRole,
+  loginAs,
+  makeApp,
+  prisma,
+  repoFor,
+  type TestUser,
+} from './harness';
 
 let gh: FakeGithub;
 let app: FastifyInstance;
@@ -123,6 +132,7 @@ async function world(opts: { participate?: boolean } = {}) {
 }
 
 async function participate(u: TestUser, projectId: string, over: object = {}) {
+  await giveRole(gh, projectId, u.login);
   await prisma.participation.create({
     data: {
       userId: u.userId,
@@ -282,6 +292,9 @@ describe('backlog REST', () => {
 
     // a member sees only the projects where their participation is active
     const member = await loginAs(app, gh);
+    // Not a GitHub collaborator: only the participation shows a board.
+    for (const r of repos)
+      gh.roles.set(`${r.installationId}:${r.fullName}:${member.login}`, 'NONE');
     await participate(member, p1!.id, { active: false });
     expect(await ids(member)).toEqual([]);
     await participate(member, p2!.id);

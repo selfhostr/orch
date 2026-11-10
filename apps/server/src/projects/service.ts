@@ -2,10 +2,20 @@ import type { Participation, Prisma, Project, ProjectPermission, User } from '@p
 import type { GithubRole, ParticipationView, ProjectView, ParticipationStatus } from '@orch/shared';
 import type { PrismaClient } from '../db';
 import type { GithubClient } from '../github';
-import { canParticipate } from './roles';
+import { canParticipate, canPush } from './roles';
 
 export const ROLE_CACHE_TTL_MS = 5 * 60 * 1000;
 export const DEFAULT_GRACE_MS = 15 * 60 * 1000;
+export const PUBLIC_ROLE_CACHE_TTL_MS = 60 * 60 * 1000;
+
+/** Cache and outage windows of a project's role: the grace starts when the cache expires. */
+function windowsOf(state: RepoAccessSettings, project: { isPrivate: boolean }) {
+  const ttl = project.isPrivate ? state.ttlMs : state.publicTtlMs;
+  // The grace counts from the last verification: a public role cached longer keeps the same
+  // margin after its cache expired as a private one.
+  const grace = project.isPrivate ? state.graceMs : state.publicTtlMs - state.ttlMs + state.graceMs;
+  return { ttl, grace: Math.max(grace, state.graceMs) };
+}
 
 export function toProjectView(p: Project): ProjectView {
   return {
@@ -125,6 +135,24 @@ export async function repoAccessAllows(
   return canParticipate(project.participationPolicy, 'NONE', info);
 }
 
+/**
+ * May this member run the project's tasks? A run pushes its branch with a `contents: write`
+ * installation token, so GitHub must give the member write access (Write, Maintain or Admin),
+ * public repositories included, and the owner must not have blocked them. The dispatcher (offers
+ * and accept) and the push token use it. Without a GitHub client: true (participation rules only).
+ */
+export async function mayRunTasks(
+  prisma: PrismaClient,
+  github: GithubClient | undefined,
+  project: ProjectRef,
+  user: UserRef,
+  memo?: RoleMemo,
+): Promise<boolean> {
+  if (!github) return true;
+  const info = await getRoleInfo(prisma, github, project, user, memo);
+  return canPush(info.role) && info.canParticipate !== false;
+}
+
 export interface RoleInfo {
   role: GithubRole;
   canSubmit: boolean | null;
@@ -140,19 +168,31 @@ export interface RepoAccessObserver {
 
 interface RepoAccessSettings {
   ttlMs: number;
+  /**
+   * Cache of a PUBLIC repository's role. Longer than `ttlMs`: every participant of every public
+   * project is checked, and collaborator webhooks (member added, removed, edited) end it early.
+   */
+  publicTtlMs: number;
   graceMs: number;
+  /** After a failed refresh, GitHub is not asked again for that pair for this long. */
+  retryMs: number;
   observer?: RepoAccessObserver;
 }
 
 interface RepoAccessState extends RepoAccessSettings {
   /** Refreshes in flight, per (project, user): concurrent checks share one GitHub call. */
   inflight: Map<string, Promise<GithubRole>>;
+  /** Last failed refresh (GitHub unreachable), per (project, user). */
+  failedAt: Map<string, number>;
 }
 
 const newState = (): RepoAccessState => ({
   ttlMs: ROLE_CACHE_TTL_MS,
+  publicTtlMs: PUBLIC_ROLE_CACHE_TTL_MS,
   graceMs: DEFAULT_GRACE_MS,
+  retryMs: 30_000,
   inflight: new Map(),
+  failedAt: new Map(),
 });
 /** One state per app, keyed by its GitHub client (no client: no refresh, only the TTL matters). */
 const states = new WeakMap<GithubClient, RepoAccessState>();
@@ -251,7 +291,9 @@ function isRateLimited(err: unknown): boolean {
  *     younger than `graceMs`, otherwise denied (nothing is cached: the next check asks again);
  *   - webhooks mark rows stale (`invalidateRepoAccess`), which also ends the grace for them, and
  *     a refresh started before an invalidation never overwrites it (compare-and-set on syncedAt).
- * Public repositories keep the legacy behaviour (an unreachable GitHub keeps the cached role).
+ * Public repositories follow the same rules: running their tasks needs write access, so an
+ * unreachable GitHub gets the same grace, then denies. After a failed refresh, GitHub is not asked
+ * again for that pair for `retryMs` (the dispatcher ticks every few seconds).
  */
 export async function getRoleInfo(
   prisma: PrismaClient,
@@ -286,9 +328,14 @@ async function lookupRole(
     canParticipate: cached?.canParticipate ?? null,
   });
   const age = cached ? Date.now() - cached.syncedAt.getTime() : Infinity;
-  if (cached && age < state.ttlMs) return info(cached.githubRole);
+  const { ttl, grace } = windowsOf(state, project);
+  if (cached && age < ttl) return info(cached.githubRole);
   if (!github) return info(cached?.githubRole ?? 'NONE');
   const key = pairKey(project.id, user.id);
+  const failed = state.failedAt.get(key);
+  if (failed !== undefined && Date.now() - failed < state.retryMs) {
+    return info(cached && age < grace ? cached.githubRole : 'NONE');
+  }
   let refresh = state.inflight.get(key);
   if (!refresh) {
     refresh = refreshRole(prisma, github, state, project, user, cached, age);
@@ -334,14 +381,15 @@ async function refreshRole(
       user.login,
     );
   } catch (err) {
-    if (!project.isPrivate) return cached?.githubRole ?? 'NONE';
     const status = statusOf(err);
     if (status === 404 || (status === 403 && !isRateLimited(err))) {
+      state.failedAt.delete(pairKey(project.id, user.id));
       state.observer?.count('denied');
       await store('NONE');
       return 'NONE';
     }
-    if (cached && age < state.graceMs) {
+    state.failedAt.set(pairKey(project.id, user.id), Date.now());
+    if (cached && age < windowsOf(state, project).grace) {
       state.observer?.count('grace');
       state.observer?.warn(
         { projectId: project.id, userId: user.id, status, ageSec: Math.round(age / 1000) },
@@ -356,6 +404,7 @@ async function refreshRole(
     );
     return 'NONE';
   }
+  state.failedAt.delete(pairKey(project.id, user.id));
   state.observer?.count('refreshed');
   await store(role);
   return role;

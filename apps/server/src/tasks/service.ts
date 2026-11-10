@@ -23,7 +23,13 @@ import type { PrismaClient } from '../db';
 import { PullRequestExistsError, type GithubClient, type GithubIssue } from '../github';
 import { HttpError } from '../http/errors';
 import { canSubmit as roleCanSubmit, toOrchRole } from '../projects/roles';
-import { RoleMemo, getRoleInfo, participationStatus, repoAccessAllows } from '../projects/service';
+import {
+  RoleMemo,
+  getRoleInfo,
+  mayRunTasks,
+  participationStatus,
+  repoAccessAllows,
+} from '../projects/service';
 import { listHistory, type HistoryFilters } from './history';
 import type { Metrics } from '../observability';
 import { bodyHash, branchNameFor, buildIssueBody, creatorOf, parseIssueBody } from './meta';
@@ -1154,17 +1160,16 @@ export class TaskService {
     const active = parts.filter(
       (p) => participationStatus(p, p.project.requireParticipantApproval) === 'active',
     );
-    // Private repositories GitHub no longer lets the member into: nothing to take there.
+    // Taking a task means pushing its branch: nothing to take where GitHub does not give the
+    // member write access (public or private repository, see `mayRunTasks`).
     const memo = new RoleMemo();
     await memo.prime(
       this.prisma,
-      active.filter((p) => p.project.isPrivate).map((p) => p.projectId),
+      active.map((p) => p.projectId),
       [agent.userId],
     );
     const allowed = await Promise.all(
-      active.map((p) =>
-        repoAccessAllows(this.prisma, this.deps.github, p.project, agent.user, memo),
-      ),
+      active.map((p) => mayRunTasks(this.prisma, this.deps.github, p.project, agent.user, memo)),
     );
     const ok = active.filter((_, i) => allowed[i]);
     const rows = await this.prisma.task.findMany({
@@ -1226,6 +1231,14 @@ export class TaskService {
     if (!(await repoAccessAllows(prisma, this.deps.github, project, agent.user))) {
       return {
         ack: refuse('access_denied', 'GitHub no longer gives you access to this repository'),
+      };
+    }
+    if (!(await mayRunTasks(prisma, this.deps.github, project, agent.user))) {
+      return {
+        ack: refuse(
+          'write_access_required',
+          'Taking a task needs write access to the repository on GitHub (Write, Maintain or Admin)',
+        ),
       };
     }
     if (!part.allowedModels.includes(task.model)) {
@@ -1368,6 +1381,13 @@ export class TaskService {
     // No repository token for a member GitHub no longer lets into the private repository.
     if (!(await repoAccessAllows(this.prisma, this.deps.github, project, agent.user))) {
       return { ok: false, reason: 'access_denied' };
+    }
+    // Pushing needs write access on GitHub: a read-only member never gets `contents: write`.
+    if (
+      p.purpose === 'push' &&
+      !(await mayRunTasks(this.prisma, this.deps.github, project, agent.user))
+    ) {
+      return { ok: false, reason: 'write_access_required' };
     }
     const repository = project.fullName.split('/')[1] ?? '';
     // The server opens the PR itself, so the agent never needs pull_requests:write.

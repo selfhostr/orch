@@ -263,6 +263,31 @@ export function makeApp(
   });
 }
 
+/**
+ * Gives a member a GitHub role on a project's repository unless the test set one: running its
+ * tasks needs write access (the run pushes its branch).
+ */
+export async function giveRole(
+  gh: FakeGithub,
+  projectId: string,
+  login: string,
+  role: GithubRole = 'WRITE',
+): Promise<void> {
+  const p = await prisma.project.findUniqueOrThrow({
+    where: { id: projectId },
+    include: { installation: true },
+  });
+  const key = `${p.installation.githubInstallationId}:${p.fullName}:${login}`;
+  if (gh.roles.has(key)) return;
+  const owner = await prisma.user.findUnique({ where: { id: p.addedById } });
+  gh.roles.set(key, owner?.login === login ? 'ADMIN' : role);
+  // A role looked up earlier (cached as NONE) is asked again.
+  await prisma.projectPermission.updateMany({
+    where: { projectId, user: { login } },
+    data: { syncedAt: new Date(0) },
+  });
+}
+
 export interface TestUser {
   login: string;
   id: number;

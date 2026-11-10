@@ -1,7 +1,8 @@
 /**
  * Repository access re-check on the offer path: on a PRIVATE repository, a member GitHub no longer
  * lets in (former owner or participant) is never a candidate, cannot accept an offer still open,
- * cannot claim or list its tasks from an agent and gets no repository token. The check reads the
+ * cannot claim or list its tasks from an agent and gets no repository token. On any repository,
+ * a member without GitHub write access is no candidate and gets no push token. The check reads the
  * cached roles once per tick (one query) and asks GitHub at most once per stale (project, member).
  */
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
@@ -118,7 +119,7 @@ describe('dispatcher: private repository access', () => {
     expect(offered.filter((a) => a.userId === w.removedId)).toEqual([]);
   });
 
-  it('ALL_MEMBERS policy or an owner override keeps a member without a GitHub role', async () => {
+  it('neither ALL_MEMBERS nor an owner override lets a member without write access run tasks', async () => {
     const w = await world(4);
     await prisma.project.update({
       where: { id: w.project.id },
@@ -130,7 +131,7 @@ describe('dispatcher: private repository access', () => {
       await w.dispatcher.snapshot(list, w.s.now),
       w.s.now,
     );
-    expect(reasonOf(members, w.removedId)).toBe('eligible');
+    expect(reasonOf(members, w.removedId)).toBe('access_denied');
     await prisma.project.update({
       where: { id: w.project.id },
       data: { participationPolicy: 'GITHUB' },
@@ -145,7 +146,57 @@ describe('dispatcher: private repository access', () => {
       await w.dispatcher.snapshot(await w.tasks(), w.s.now),
       w.s.now,
     );
-    expect(reasonOf(members, w.removedId)).toBe('eligible');
+    expect(reasonOf(members, w.removedId)).toBe('access_denied');
+  });
+
+  it('a read-only collaborator is no candidate, on a public repository too', async () => {
+    for (const isPrivate of [true, false]) {
+      const w = await world(isPrivate ? 9 : 10);
+      await prisma.project.update({ where: { id: w.project.id }, data: { isPrivate } });
+      for (const role of ['READ', 'TRIAGE'] as const) {
+        w.gh.roles.set(w.key(w.collabId), role);
+        await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: w.collabId });
+        const list = await w.tasks();
+        const members = await w.dispatcher.evaluateMembers(
+          list[0]!,
+          await w.dispatcher.snapshot(list, w.s.now),
+          w.s.now,
+        );
+        expect(reasonOf(members, w.collabId)).toBe('access_denied');
+        expect(reasonOf(members, w.removedId)).toBe('access_denied');
+        // The repository owner, as GitHub reports them (ADMIN, set without giveRole), runs.
+        expect(reasonOf(members, w.ownerId)).not.toBe('access_denied');
+      }
+      w.gh.roles.set(w.key(w.collabId), 'MAINTAIN');
+      await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: w.collabId });
+      const list = await w.tasks();
+      const members = await w.dispatcher.evaluateMembers(
+        list[0]!,
+        await w.dispatcher.snapshot(list, w.s.now),
+        w.s.now,
+      );
+      expect(reasonOf(members, w.collabId)).not.toBe('access_denied');
+    }
+  });
+
+  it('why-not-running says when no participant has write access', async () => {
+    const w = await world(15);
+    const [task] = await w.tasks();
+    const codes = async () =>
+      (await w.dispatcher.whyNotRunning(task!.id, w.s.now)).taskReasons.map((r) => r.code);
+    expect(await codes()).not.toContain('no_writer');
+    for (const id of [w.ownerId, w.collabId]) {
+      w.gh.roles.set(w.key(id), 'READ');
+      await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: id });
+    }
+    expect(await codes()).toContain('no_writer');
+    // A writer who is paused cannot receive it: the explanation stays.
+    w.gh.roles.set(w.key(w.collabId), 'WRITE');
+    await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: w.collabId });
+    await prisma.user.update({ where: { id: w.collabId }, data: { paused: true } });
+    expect(await codes()).toContain('no_writer');
+    await prisma.user.update({ where: { id: w.collabId }, data: { paused: false } });
+    expect(await codes()).not.toContain('no_writer');
   });
 
   it('accept() refuses an offer still open once GitHub denies, and closes it', async () => {
@@ -199,6 +250,71 @@ describe('agent side: private repository access', () => {
     });
     expect(tok).toEqual({ ok: false, reason: 'access_denied' });
   });
+
+  it('manual take: a read-only member sees nothing to take and is refused, a writer is not', async () => {
+    for (const isPrivate of [true, false]) {
+      const w = await world(isPrivate ? 12 : 13);
+      await prisma.project.update({ where: { id: w.project.id }, data: { isPrivate } });
+      const svc = new TaskService({ prisma, config, github: w.gh });
+      const collab = await prisma.agent.findFirstOrThrow({
+        where: { userId: w.collabId, revokedAt: null },
+        include: { user: true },
+      });
+      const listed = (await svc.takeable(collab)).tasks;
+      expect(listed.length).toBeGreaterThan(0);
+      const target = { projectFullName: w.project.fullName, issueNumber: listed[0]!.issueNumber };
+
+      w.gh.roles.set(w.key(w.collabId), 'READ');
+      await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: w.collabId });
+      expect((await svc.takeable(collab)).tasks).toEqual([]);
+      const refused = await svc.claim(collab, target);
+      expect(refused.ack).toMatchObject({ ok: false, error: { code: 'write_access_required' } });
+      // MCP take_task goes through the same claim (initiated by the server).
+      const viaMcp = await svc.claim(collab, target, 'server');
+      expect(viaMcp.ack).toMatchObject({ ok: false, error: { code: 'write_access_required' } });
+
+      w.gh.roles.set(w.key(w.collabId), 'WRITE');
+      await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: w.collabId });
+      expect((await svc.takeable(collab)).tasks.map((t) => t.taskId)).toContain(listed[0]!.taskId);
+      expect((await svc.claim(collab, target)).ack.ok).toBe(true);
+    }
+  });
+
+  it('a writer downgraded to read during a run keeps clone tokens but gets no push token', async () => {
+    const w = await world(11);
+    const svc = new TaskService({ prisma, config, github: w.gh });
+    const collab = await prisma.agent.findFirstOrThrow({
+      where: { userId: w.collabId, revokedAt: null },
+      include: { user: true },
+    });
+    const listed = (await svc.takeable(collab)).tasks;
+    const won = await svc.claim(collab, {
+      projectFullName: w.project.fullName,
+      issueNumber: listed[0]!.issueNumber,
+    });
+    expect(won.ack.ok).toBe(true);
+    const assignmentId = won.offer!.assignmentId;
+    // Write access: one repository, `contents: write` only (the server opens the PR itself).
+    const push = await svc.mintToken(collab, { assignmentId, purpose: 'push' });
+    expect(push).toMatchObject({ ok: true, permissions: { contents: 'write' } });
+    expect(w.gh.tokenCalls.at(-1)!.scope).toEqual({
+      repository: w.project.fullName.split('/')[1],
+      permissions: { contents: 'write' },
+    });
+    // Downgraded to read on GitHub during the run: reading still works, pushing does not.
+    w.gh.roles.set(w.key(w.collabId), 'READ');
+    await invalidateRepoAccess(prisma, { projectId: w.project.id, userId: w.collabId });
+    const calls = w.gh.tokenCalls.length;
+    expect(await svc.mintToken(collab, { assignmentId, purpose: 'clone' })).toMatchObject({
+      ok: true,
+      permissions: { contents: 'read' },
+    });
+    expect(await svc.mintToken(collab, { assignmentId, purpose: 'push' })).toEqual({
+      ok: false,
+      reason: 'write_access_required',
+    });
+    expect(w.gh.tokenCalls).toHaveLength(calls + 1);
+  });
 });
 
 describe('role cache hardening', () => {
@@ -218,6 +334,55 @@ describe('role cache hardening', () => {
     // Nothing was cached: the row still holds the verified role.
     const row = await prisma.projectPermission.findFirstOrThrow({ where: { userId: w.collabId } });
     expect(row.githubRole).toBe('WRITE');
+  });
+
+  it('public repository: an outage gets the grace, then denies, without asking GitHub every tick', async () => {
+    const w = await world(14);
+    await prisma.project.update({ where: { id: w.project.id }, data: { isPrivate: false } });
+    // Same windows as a private repository here (public roles are cached 1 h by default).
+    configureRepoAccess(w.gh, { publicTtlMs: 5 * 60_000 });
+    const project = { ...w.project, isPrivate: false };
+    const who = { id: w.collabId, login: w.users.find((u) => u.id === w.collabId)!.login };
+    expect((await getRoleInfo(prisma, w.gh, project, who)).role).toBe('WRITE');
+    const age = async (ms: number) =>
+      prisma.projectPermission.updateMany({
+        where: { userId: w.collabId, projectId: w.project.id },
+        data: { syncedAt: new Date(Date.now() - ms) },
+      });
+    await age(6 * 60_000); // past the TTL, within the grace
+    w.gh.failRoles = true;
+    const before = w.gh.roleCalls;
+    expect((await getRoleInfo(prisma, w.gh, project, who)).role).toBe('WRITE');
+    expect(w.gh.roleCalls).toBe(before + 1);
+    // Failed just now: GitHub is not asked again during the retry delay.
+    for (let i = 0; i < 3; i++) await getRoleInfo(prisma, w.gh, project, who);
+    expect(w.gh.roleCalls).toBe(before + 1);
+    // Past the grace: denied (still without hammering GitHub), then asked again after the delay.
+    await age(20 * 60_000);
+    expect((await getRoleInfo(prisma, w.gh, project, who)).role).toBe('NONE');
+    expect(w.gh.roleCalls).toBe(before + 1);
+    configureRepoAccess(w.gh, { retryMs: 0 });
+    expect((await getRoleInfo(prisma, w.gh, project, who)).role).toBe('NONE');
+    expect(w.gh.roleCalls).toBe(before + 2);
+    w.gh.failRoles = false;
+    expect((await getRoleInfo(prisma, w.gh, project, who)).role).toBe('WRITE');
+  });
+
+  it('public roles are cached longer: no GitHub call within the public cache', async () => {
+    const w = await world(16);
+    await prisma.project.update({ where: { id: w.project.id }, data: { isPrivate: false } });
+    const project = { ...w.project, isPrivate: false };
+    const who = { id: w.collabId, login: w.users.find((u) => u.id === w.collabId)!.login };
+    expect((await getRoleInfo(prisma, w.gh, project, who)).role).toBe('WRITE');
+    await prisma.projectPermission.updateMany({
+      where: { userId: w.collabId, projectId: w.project.id },
+      data: { syncedAt: new Date(Date.now() - 30 * 60_000) },
+    });
+    const before = w.gh.roleCalls;
+    expect((await getRoleInfo(prisma, w.gh, project, who)).role).toBe('WRITE');
+    expect(w.gh.roleCalls).toBe(before); // 30 min old: still cached for a public repository
+    expect((await getRoleInfo(prisma, w.gh, w.project, who)).role).toBe('WRITE');
+    expect(w.gh.roleCalls).toBe(before + 1); // private: the 5 min cache expired
   });
 
   it('concurrent checks share one GitHub call', async () => {
