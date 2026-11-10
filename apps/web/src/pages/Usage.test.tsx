@@ -181,7 +181,7 @@ describe('Usage', () => {
       }),
     });
     renderApp('/usage');
-    expect(await screen.findByText('Usage is unavailable')).toBeTruthy();
+    expect(await screen.findByText('Usage is unavailable (boom)')).toBeTruthy();
   });
 
   it('adds the Usage station to the rail', async () => {

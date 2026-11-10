@@ -7,7 +7,8 @@ import { AgentCard } from '../components/AgentCard';
 import { NotificationSettings } from '../components/NotificationSettings';
 import { InstallAgentCard } from '../components/InstallAgentCard';
 import { TemplatesManager } from '../components/TemplatesManager';
-import { Modal, closeModal } from '../ui/Modal';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { closeModal } from '../ui/Modal';
 import { usePresence } from '../ui/presence';
 import { useToast } from '../ui/Toast';
 import { useT } from '../i18n/index.ts';
@@ -85,28 +86,16 @@ export function MyServer() {
       <TemplatesManager scope="personal" />
       <NotificationSettings />
       {toRevoke && (
-        <Modal
+        <ConfirmDialog
           label={t('server.revoke.label')}
           title={t('server.revoke.title', { machine: toRevoke.machineName })}
+          body={t('server.revoke.body')}
+          confirmLabel={t('server.revoke.confirm')}
+          pending={revoke.isPending}
+          error={revoke.error}
+          onConfirm={() => revoke.mutate(toRevoke)}
           onClose={() => setToRevoke(null)}
-          closeButton={false}
-          tone="danger"
-        >
-          <p>{t('server.revoke.body')}</p>
-          {revoke.error && <p className="error">{errorMessage(revoke.error)}</p>}
-          <div className="modal-actions">
-            <button onClick={() => closeModal(() => setToRevoke(null))}>
-              {t('common.actions.cancel')}
-            </button>
-            <button
-              className="danger solid"
-              disabled={revoke.isPending}
-              onClick={() => revoke.mutate(toRevoke)}
-            >
-              {t('server.revoke.confirm')}
-            </button>
-          </div>
-        </Modal>
+        />
       )}
     </div>
   );

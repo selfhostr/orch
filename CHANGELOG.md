@@ -14,11 +14,14 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Changed
 
+- Removing a member or a project, denying an access request, revoking an invite link and rotating the notification signing secret now ask for confirmation in the same dialog as revoking a machine or a token. Browser `confirm()` popups are gone.
+- An error with no translation now shows the server's error code: in English after the message, in French after the status (`Request failed (418): teapot`).
 - Dependabot is the only dependency update tool: the second, unused update configuration is removed.
 - The interface uses Inter and JetBrains Mono (both OFL-1.1, self-hosted through fontsource) instead of Overpass and Overpass Mono.
 
 ### Fixed
 
+- Keyboard focus is visible again on the dialogs and the notification panel (their `outline: none` had no replacement).
 - A progress report (`task.status`, `task.pushed`, `task.finished`) racing the end of a lapsed lease no longer revives the run: a LOST assignment is not rewritten as RUNNING, PUSHED or SUCCEEDED, and its task, already back in the pool, does not go to IN_REVIEW.
 - `task.pushed` sent again after its first delivery opened the pull request but failed to record it reuses that pull request instead of failing on GitHub's 422 at every retry (only an open pull request with the same branch and base, and only for the 422 that says one already exists). A pull request opened for a run declared lost before it was recorded is closed with a comment explaining why.
 - An agent message the server saw but never acknowledged (server stopped while processing it) is processed again when the agent resends it, instead of being acknowledged as a duplicate without effect. A lost `task.finished`, or a lost `task.pushed` (its pull request is reused, see above), no longer turns the run LOST and runs the task a second time. A usage report processed again is stored once.

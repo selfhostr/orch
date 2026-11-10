@@ -50,6 +50,9 @@ const GENERIC = {
   template_not_found: 'errors.generic.template_not_found',
 } as const satisfies Record<string, MessageKey>;
 
+/** Code given by the client when the answer carried none (see api/client.ts). */
+const NO_CODE = 'http_error';
+
 const has = <T extends object>(o: T, k: string): k is Extract<keyof T, string> =>
   Object.prototype.hasOwnProperty.call(o, k);
 
@@ -57,9 +60,14 @@ const has = <T extends object>(o: T, k: string): k is Extract<keyof T, string> =
 export function errorMessage(e: unknown): string {
   if (e instanceof ApiError) {
     if (has(SPECIFIC, e.code)) return t(SPECIFIC[e.code]);
-    if (getLocale() === 'en') return e.message;
-    if (has(GENERIC, e.code)) return t(GENERIC[e.code]);
-    return t('errors.requestFailed', { status: e.status });
+    const generic = has(GENERIC, e.code) ? GENERIC[e.code] : null;
+    // A code with no translation is shown as is, so the useful part of the answer is never lost.
+    const showCode = !generic && e.code !== NO_CODE;
+    if (getLocale() === 'en') return showCode ? `${e.message} (${e.code})` : e.message;
+    if (generic) return t(generic);
+    return showCode
+      ? t('errors.requestFailedCode', { status: e.status, code: e.code })
+      : t('errors.requestFailed', { status: e.status });
   }
   // fetch() rejects with a TypeError when the server cannot be reached.
   if (e instanceof TypeError) return t('errors.network');

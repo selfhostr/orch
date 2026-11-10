@@ -14,7 +14,11 @@ export default {
   card: {
     private: 'privé',
     remove: 'Retirer',
-    removeConfirm: 'Retirer {name} d’orch ?',
+    removeConfirm:
+      'Ses tâches et ses réglages sont supprimés d’orch. Le dépôt GitHub n’est pas modifié.',
+    removeLabel: 'Retirer le projet',
+    removeTitle: 'Retirer {name} ?',
+    removeAction: 'Retirer le projet',
     saved: 'Paramètres de {name} enregistrés',
     removed: '{name} retiré d’orch',
     visibility: 'Visibilité',

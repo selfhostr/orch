@@ -16,6 +16,7 @@ import {
 import { errorMessage } from '../i18n/errors.ts';
 import { formatDate } from '../i18n/format.ts';
 import { useT, type MessageKey } from '../i18n/index.ts';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Modal, closeModal } from '../ui/Modal';
 import { presenceProps, usePresence, type Phase } from '../ui/presence';
 import { useToast } from '../ui/Toast';
@@ -272,6 +273,7 @@ export function ProjectCard({ project, phase = 'idle' }: { project: ProjectView;
     },
   });
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const id = project.id;
   return (
     <article className="card" aria-label={project.fullName} {...presenceProps(phase)}>
@@ -283,16 +285,24 @@ export function ProjectCard({ project, phase = 'idle' }: { project: ProjectView;
         <button
           className="danger"
           disabled={remove.isPending}
-          onClick={() => {
-            if (window.confirm(t('projects.card.removeConfirm', { name: project.fullName })))
-              remove.mutate();
-          }}
+          onClick={() => setConfirmRemove(true)}
         >
           {t('projects.card.remove')}
         </button>
       </div>
       {update.error && <p className="error">{errorMessage(update.error)}</p>}
-      {remove.error && <p className="error">{errorMessage(remove.error)}</p>}
+      {confirmRemove && (
+        <ConfirmDialog
+          label={t('projects.card.removeLabel')}
+          title={t('projects.card.removeTitle', { name: project.fullName })}
+          body={t('projects.card.removeConfirm')}
+          confirmLabel={t('projects.card.removeAction')}
+          pending={remove.isPending}
+          error={remove.error}
+          onConfirm={() => remove.mutate()}
+          onClose={() => setConfirmRemove(false)}
+        />
+      )}
       <div className="grid">
         <label className="field" htmlFor={`vis-${id}`}>
           {t('projects.card.visibility')}

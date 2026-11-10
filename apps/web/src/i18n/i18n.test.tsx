@@ -126,11 +126,19 @@ describe('errorMessage', () => {
     const missing = new ApiError(404, 'not_found', 'Agent not found');
     expect(errorMessage(closed)).toMatch(/no longer available/);
     expect(errorMessage(missing)).toBe('Agent not found');
+    // English: the server message, plus the code when it has no translation
+    expect(errorMessage(new ApiError(418, 'teapot', 'I am a teapot'))).toBe(
+      'I am a teapot (teapot)',
+    );
     await loadLocale('fr');
     expect(errorMessage(closed)).toMatch(/n’est plus disponible/);
     expect(errorMessage(missing)).toBe('Introuvable.');
     expect(errorMessage(new ApiError(418, 'teapot', 'I am a teapot'))).toBe(
-      'La requête a échoué (418)',
+      'La requête a échoué (418) : teapot',
+    );
+    // no code in the answer: only the status
+    expect(errorMessage(new ApiError(502, 'http_error', 'Request failed (502)'))).toBe(
+      'La requête a échoué (502)',
     );
     expect(errorMessage(new TypeError('Failed to fetch'))).toMatch(/injoignable/);
   });

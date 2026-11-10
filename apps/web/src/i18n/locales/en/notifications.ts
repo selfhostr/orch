@@ -103,6 +103,10 @@ export default {
       docs: 'How to verify signatures',
       previous: 'The previous secret also signs until {date}.',
       generated: 'New signing secret generated',
+      rotateLabel: 'Rotate signing secret',
+      rotateTitle: 'Rotate the signing secret?',
+      rotateBody:
+        'A new secret is generated and shown once. The previous one keeps signing for a short time, then receivers that still use it fail verification.',
       rotateFailed: 'Could not rotate the secret',
       revealTitle: 'Webhook signing secret',
       revealHint:

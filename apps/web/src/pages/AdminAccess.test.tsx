@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mockApi, me, renderApp, switchToFrench } from '../test/helpers';
 
@@ -84,7 +84,6 @@ describe('Admin access', () => {
   });
 
   it('asks for confirmation before removing a member', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const calls = mockApi({
       'GET /me': () => ({ json: admin }),
       'GET /admin/access/pending-count': () => ({ json: { count: 1 } }),
@@ -93,11 +92,58 @@ describe('Admin access', () => {
     });
     renderApp('/admin/access');
     fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
-    expect(confirm).toHaveBeenCalledTimes(1);
+    const dialog = await screen.findByRole('dialog', { name: 'Remove member' });
+    expect(within(dialog).getByRole('heading', { name: 'Remove bob?' })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(calls.some((c) => c.path.endsWith('/remove'))).toBe(false);
-    confirm.mockReturnValue(true);
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    const again = await screen.findByRole('dialog', { name: 'Remove member' });
+    fireEvent.click(within(again).getByRole('button', { name: 'Remove member' }));
     await waitFor(() => expect(calls.some((c) => c.path.endsWith('/g2/remove'))).toBe(true));
+  });
+
+  it('asks for confirmation before denying a request', async () => {
+    const calls = mockApi({
+      'GET /me': () => ({ json: admin }),
+      'GET /admin/access/pending-count': () => ({ json: { count: 1 } }),
+      'GET /admin/access': () => ({ json: access }),
+      'POST /admin/access/grants/g1/deny': () => ({ json: { grant: grant() } }),
+    });
+    renderApp('/admin/access');
+    fireEvent.click(await screen.findByRole('button', { name: 'Deny' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Deny request' });
+    expect(calls.some((c) => c.path.endsWith('/deny'))).toBe(false);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Deny request' }));
+    await waitFor(() => expect(calls.some((c) => c.path.endsWith('/g1/deny'))).toBe(true));
+  });
+
+  it('asks for confirmation before revoking an invite link', async () => {
+    const invite = {
+      id: 'i1',
+      multiUse: true,
+      uses: 0,
+      expiresAt: '2099-01-01T10:00:00Z',
+      revokedAt: null,
+      createdBy: 'root',
+      createdAt: '2026-10-20T10:00:00Z',
+      lastUsedAt: null,
+      active: true,
+    };
+    const calls = mockApi({
+      'GET /me': () => ({ json: admin }),
+      'GET /admin/access/pending-count': () => ({ json: { count: 1 } }),
+      'GET /admin/access': () => ({ json: { ...access, invites: [invite] } }),
+      'POST /admin/access/invites/i1/revoke': () => ({
+        json: { invite: { ...invite, revokedAt: '2026-10-21T10:00:00Z', active: false } },
+      }),
+    });
+    renderApp('/admin/access');
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Revoke invite link' });
+    expect(calls.some((c) => c.path.endsWith('/revoke'))).toBe(false);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke link' }));
+    await waitFor(() => expect(calls.some((c) => c.path.endsWith('/i1/revoke'))).toBe(true));
   });
 
   it('shows the nav item with a badge only for admins', async () => {
@@ -129,15 +175,22 @@ describe('Admin access', () => {
       'POST /admin/access/grants': () => ({ json: { grant: grant({ githubLogin: 'carol' }) } }),
     });
     renderApp('/admin/access');
-    fireEvent.click(await screen.findByRole('button', { name: 'Deny' }));
-    expect(await screen.findByText('Deny exploded')).toBeTruthy();
+    const deny = async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Deny' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Deny request' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Deny request' }));
+    };
+    await deny();
+    // The failure stays in the dialog, with the code the server sent.
+    const failed = await screen.findByRole('dialog', { name: 'Deny request' });
+    expect(within(failed).getByText('Deny exploded (boom)')).toBeTruthy();
+    fireEvent.click(within(failed).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByText('Deny exploded (boom)')).toBeTruthy();
     // A different action succeeds: the stale failure must go away.
     fireEvent.change(screen.getByLabelText('Add a GitHub login'), { target: { value: 'carol' } });
     fireEvent.click(screen.getByRole('button', { name: 'Pre-approve' }));
-    await waitFor(() => expect(screen.queryByText('Deny exploded')).toBeNull());
-    // A fresh failure still shows.
-    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
-    expect(await screen.findByText('Deny exploded')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('Deny exploded (boom)')).toBeNull());
   });
 });
 
