@@ -24,6 +24,7 @@ const SPECIFIC = {
   not_retryable: 'errors.api.not_retryable',
   offer_closed: 'errors.api.offer_closed',
   paused: 'errors.api.paused',
+  push_endpoint_taken: 'errors.api.push_endpoint_taken',
   push_not_configured: 'errors.api.push_not_configured',
   server_version_unknown: 'errors.api.server_version_unknown',
   task_cancelled: 'errors.api.task_cancelled',

@@ -6,7 +6,8 @@
 import { runOk, type CommandRunner } from './runner';
 
 export interface ScreenOps {
-  start(name: string, argv: string[]): Promise<void>;
+  /** `env`: extra environment of the session's command (secret values, never in argv). */
+  start(name: string, argv: string[], env?: Record<string, string>): Promise<void>;
   exists(name: string): Promise<boolean>;
   kill(name: string): Promise<void>;
 }
@@ -17,10 +18,11 @@ export class CliScreen implements ScreenOps {
     private readonly bin = 'screen',
   ) {}
 
-  async start(name: string, argv: string[]): Promise<void> {
-    // argv is exec'd directly by screen (no shell), so the prompt needs no quoting.
+  async start(name: string, argv: string[], env: Record<string, string> = {}): Promise<void> {
+    // argv is exec'd directly by screen (no shell), so the prompt needs no quoting. The session's
+    // command inherits screen's environment, which is where `docker exec -e NAME` reads secrets.
     await runOk(this.runner, this.bin, ['-dmS', name, ...argv], {
-      env: { TERM: 'xterm-256color' },
+      env: { ...env, TERM: 'xterm-256color' },
     });
   }
 

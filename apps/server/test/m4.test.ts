@@ -15,6 +15,7 @@ import {
 import { OfferRefusedError } from '../src/agents/gateway';
 import { signBody } from '../src/webhooks';
 import {
+  giveRole,
   FakeGithub,
   TEST_WEBHOOK_SECRET,
   api,
@@ -181,6 +182,7 @@ async function participate(
     active?: boolean;
   } = {},
 ) {
+  await giveRole(gh, projectId, u.login);
   await prisma.participation.create({
     data: {
       userId: u.userId,
@@ -667,7 +669,7 @@ describe('consent is absolute', () => {
   it('a rejected member gets no offer until the owner undoes the rejection', async () => {
     const { owner, project: p, repo } = await project();
     const u = await loginAs(app, gh);
-    gh.roles.set(`${repo.installationId}:${repo.fullName}:${u.login}`, 'READ');
+    gh.roles.set(`${repo.installationId}:${repo.fullName}:${u.login}`, 'WRITE');
     const put = await api(app, u)('PUT', `/api/projects/${p.id}/participation`, {
       participating: true,
       budgetPercent: 50,
@@ -693,7 +695,7 @@ describe('consent is absolute', () => {
   it('the owner cannot change a member mode or accept for them; leaving auto mode withdraws pending auto offers', async () => {
     const { owner, project: p, repo } = await project();
     const m = await member(p.id, { mode: 'AUTO' });
-    gh.roles.set(`${repo.installationId}:${repo.fullName}:${m.user.login}`, 'READ');
+    gh.roles.set(`${repo.installationId}:${repo.fullName}:${m.user.login}`, 'WRITE');
     const t = await createTask(owner, p.id);
     const offer = await m.client.next('task.offer', (o) => o.payload.task.taskId === t.id);
     // owner tries to flip the member to auto / approve on their behalf: no route edits someone else's participation
@@ -1499,7 +1501,7 @@ describe('participation sync (config.update) and not_participating backoff', () 
   it('joined (and approved) after the agent connected: config.update, then the AUTO offer is accepted', async () => {
     const { owner, project: p, repo } = await project();
     const u = await loginAs(app, gh);
-    gh.roles.set(`${repo.installationId}:${repo.fullName}:${u.login}`, 'READ');
+    gh.roles.set(`${repo.installationId}:${repo.fullName}:${u.login}`, 'WRITE');
     const m = await onlineAgent(u);
     await report(m, { projectId: p.id });
     expect(m.client.find('welcome')[0]?.payload.participations).toEqual([]);
@@ -1540,7 +1542,7 @@ describe('participation sync (config.update) and not_participating backoff', () 
       data: { requireParticipantApproval: false },
     });
     const m = await member(p.id, { approvedAt: null });
-    gh.roles.set(`${repo.installationId}:${repo.fullName}:${m.user.login}`, 'READ');
+    gh.roles.set(`${repo.installationId}:${repo.fullName}:${m.user.login}`, 'WRITE');
     expect(m.client.find('welcome')[0]?.payload.participations.map((x) => x.projectId)).toEqual([
       p.id,
     ]);
@@ -1577,7 +1579,7 @@ describe('participation sync (config.update) and not_participating backoff', () 
   it('a not_participating rejection is re-offered after an exponential backoff, never at once', async () => {
     const { owner, project: p, repo } = await project();
     const m = await member(p.id);
-    gh.roles.set(`${repo.installationId}:${repo.fullName}:${m.user.login}`, 'READ');
+    gh.roles.set(`${repo.installationId}:${repo.fullName}:${m.user.login}`, 'WRITE');
     const t = await createTask(owner, p.id);
     const rejectLast = async (n: number) => {
       await until(() => autoOffers(m, t.id).length === n);
@@ -1630,7 +1632,7 @@ describe('participation sync (config.update) and not_participating backoff', () 
   it('a failed run sends the task back to TODO and it is re-offered after a short backoff', async () => {
     const { owner, project: p, repo } = await project();
     const m = await member(p.id);
-    gh.roles.set(`${repo.installationId}:${repo.fullName}:${m.user.login}`, 'READ');
+    gh.roles.set(`${repo.installationId}:${repo.fullName}:${m.user.login}`, 'WRITE');
     const t = await createTask(owner, p.id);
     const failOffer = async (n: number) => {
       await until(() => autoOffers(m, t.id).length === n);

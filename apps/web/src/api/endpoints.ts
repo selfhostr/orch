@@ -163,6 +163,15 @@ const AccessSchema = z.object({
     orgs: z.array(z.string()),
     admins: z.array(z.string()),
     allowAny: z.boolean(),
+    bindings: z
+      .array(
+        z.object({
+          kind: z.enum(['ADMIN', 'ALLOWED']),
+          login: z.string(),
+          githubUserId: z.string(),
+        }),
+      )
+      .default([]),
   }),
 });
 export type AccessGrant = z.infer<typeof GrantSchema>;

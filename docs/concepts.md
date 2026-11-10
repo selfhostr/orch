@@ -16,6 +16,12 @@ Joining a project creates a **participation** with:
 
 Nobody, including project owners and admins, can set someone else's participation or bypass the mode.
 
+(who-runs)=
+
+### Who can run tasks
+
+Running a task pushes its branch to the repository, so the agent receives a GitHub installation token with `contents: write` on that one repository. orch therefore runs tasks only on the machines of members to whom GitHub gives write access to the repository (Write, Maintain or Admin), on public and private repositories alike. A member with Read or Triage access, or no access, can join a project (when its "Who can participate" setting allows it) and see its board, but is never offered its tasks, and an offer still open is refused when they lose write access. They cannot take a task by hand either: `orch take` and the MCP tool `take_task` refuse with `write_access_required`, and the agent's list of tasks to take leaves them out. A push token is refused (`write_access_required`) to an agent whose member has no write access (any more): the run fails with the failure class "No write access" (`access`), shown in the task history; a clone token only needs read access. The "Who can participate" setting and the owner's per-member blocks only narrow this further: "All orch users on this server" or an allowlist entry does not give write access. When no participant has write access, "Why isn't this running?" on the task card says so. The role is read from GitHub, only for participants with a connected machine, and cached for `ORCH_REPO_ACCESS_TTL_SEC` (`ORCH_REPO_ACCESS_PUBLIC_TTL_SEC`, one hour by default, for public repositories; collaborator webhooks end both early); a custom organization role counts by the rights GitHub reports for it (push, maintain, admin). If GitHub cannot be reached, the last verified role is reused for `ORCH_REPO_ACCESS_GRACE_SEC`, then the member is refused, on public repositories too, and GitHub is not asked again for that member and project for 30 seconds (see {doc}`security`).
+
 ## The pool
 
 The **pool** is the set of members who participate in a project and whose agents are online. The **Pool** page shows their availability (estimates). Tasks are offered to pool members; a member can also take a task directly with `orch take`.
@@ -59,7 +65,7 @@ Kanban columns on the Backlog page: **To do** = PROPOSED, BLOCKED, READY, OFFERE
 For each READY task the dispatcher (every 5 s by default) picks eligible candidates:
 
 1. all dependencies are `DONE`;
-2. the user has an active participation, is allowed in the project, and, for a targeted task, is among the targets;
+2. the user has an active participation, is allowed in the project, has **write access to the repository on GitHub** (Write, Maintain or Admin, see below) and, for a targeted task, is among the targets;
 3. their agent is online, not revoked and not paused, below its concurrency limit, and the model is allowed;
 4. their budget margin covers the task estimate, they are not rate limited, and they have not rejected or failed this task in the last 24 hours.
 
@@ -93,6 +99,8 @@ It can run as several instances behind a load balancer, with Postgres as the onl
 On the member machine the agent keeps a bare **mirror** of each repository and makes an **isolated clone** per task, not a worktree of your working copy. Each task runs in its own container: non-root, with only that clone mounted, no Docker socket and no host home directory. Git metadata (the mirror and the clone's `.git` bookkeeping) stays outside the task container so a task cannot rewrite hooks or config that the agent's git would run later.
 
 The task image comes from the repository's `Dockerfile` or a simple `.devcontainer.json`, otherwise a default image (`ORCH_DEFAULT_IMAGE`). In auto mode the agent runs `claude -p --permission-mode bypassPermissions` inside the container and the PR is opened as a **draft**. In manual mode (`orch take`) it starts an interactive Claude session in a `screen` and you finish with `orch done`.
+
+The image's `ENTRYPOINT`, `CMD` and `HEALTHCHECK` are not run. The devcontainer's `postCreateCommand` runs once, before Claude, and every process it leaves running (a database or dev server started in the background, for example) is stopped before Claude starts, so Claude's environment, which holds your Claude token, cannot be read by them. A service the task needs must be started by Claude itself or by the project's own scripts during the task, or run as a sidecar from the repository's `compose.yaml`.
 
 ### The compose guard
 

@@ -123,6 +123,7 @@ export const BlockReasonCode = z.enum([
   'project_unavailable',
   'pending_offer',
   'no_member',
+  'no_writer',
   // member-level
   'not_targeted',
   'member_paused',

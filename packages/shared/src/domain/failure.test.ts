@@ -4,6 +4,15 @@ import { redactSecrets } from '../redact';
 import { parseAgentMessage, agentMessage } from '../protocol';
 
 describe('classifyFailure', () => {
+  it('a refused push token (no write access) is an access failure', () => {
+    expect(
+      classifyFailure(
+        'Token denied by the server: write_access_required (GitHub no longer gives you write access to this repository, so the branch cannot be pushed)',
+      ),
+    ).toBe('access');
+    expect(classifyFailure('Token denied by the server: write_access_required')).toBe('access');
+  });
+
   it('classifies the v0.5.0 production errors', () => {
     expect(classifyFailure('docker compose failed: env file /some/path/.env not found')).toBe(
       'env',

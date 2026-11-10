@@ -13,9 +13,10 @@ export function unmetDeps(task: TaskView) {
 }
 
 function Reason({ r }: { r: BlockReason }) {
+  const t = useT();
   return (
     <>
-      {r.message}
+      {r.code === 'no_writer' ? t('backlog.why.noWriter') : r.message}
       {r.until ? ` (${relative(r.until)})` : ''}
     </>
   );
