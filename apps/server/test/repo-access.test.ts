@@ -484,8 +484,8 @@ describe('GitHub outage', () => {
   });
 });
 
-describe('public repositories are unaffected', () => {
-  it('keep the stored owner and the old outage behaviour', async () => {
+describe('public repositories', () => {
+  it('keep the stored owner; a GitHub outage gets the grace, then denies the role', async () => {
     const { owner, repo, project, row } = await world(false);
     gh.roles.delete(roleKey(repo, owner)); // GitHub would say NONE, but it is public
     await stale(owner.userId);
@@ -493,13 +493,16 @@ describe('public repositories are unaffected', () => {
     expect(s).toMatchObject({ usageRuns: 1, usageProjects: 1, poolProjects: 1, mine: 1 });
     expect(s.templatesStatus).not.toBe(404);
 
-    // Outage far beyond the grace window: the cached role is still used (legacy behaviour).
+    // Outage far beyond the grace window: the role is denied, as for a private repository
+    // (running tasks there needs write access); the stored owner is unaffected.
     gh.roles.set(roleKey(repo, owner), 'ADMIN');
     await stale(owner.userId);
     await getRoleInfo(prisma, gh, row, asUser(owner));
     await age(owner.userId, 24 * 3600_000);
-    gh.failRolesWith = status(403);
-    expect((await getRoleInfo(prisma, gh, row, asUser(owner))).role).toBe('ADMIN');
-    expect(results).not.toContain('outage_denied');
+    gh.failRolesWith = status(503);
+    expect((await getRoleInfo(prisma, gh, row, asUser(owner))).role).toBe('NONE');
+    expect(results).toContain('outage_denied');
+    gh.failRolesWith = undefined;
+    expect((await sees(owner, project.id)).mine).toBe(1);
   });
 });

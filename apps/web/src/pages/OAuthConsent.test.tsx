@@ -28,6 +28,9 @@ describe('OAuth consent page', () => {
     });
     renderApp('/oauth/consent?' + qs + '&junk=1');
     expect(await screen.findByRole('heading', { name: 'Authorize Claude Code' })).toBeTruthy();
+    expect(screen.getByText(/your browser and the access code go to/).textContent).toContain(
+      'localhost',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith('http://localhost:1/cb?code=x'));
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ ...params, approve: true });
@@ -100,6 +103,7 @@ describe('OAuth consent page', () => {
     renderApp('/oauth/consent?' + qs);
     expect(await screen.findByRole('heading', { name: 'Autoriser Claude Code' })).toBeTruthy();
     expect(screen.getByText(/veut utiliser les outils MCP d’orch/)).toBeTruthy();
+    expect(screen.getByText(/ton navigateur et le code d’accès partent vers/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Approuver' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Refuser' })).toBeTruthy();
   });

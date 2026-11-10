@@ -167,7 +167,7 @@ describe('My server', () => {
     });
     renderApp('/my-server');
     fireEvent.click(await screen.findByRole('switch', { name: 'Pause laptop' }));
-    expect(await screen.findByText('Server exploded')).toBeTruthy();
+    expect(await screen.findByText('Server exploded (boom)')).toBeTruthy();
     await waitFor(() => expect(screen.queryByText(/Paused: no new tasks/)).toBeNull());
     expect(screen.getByRole('switch', { name: 'Pause laptop' })).toBeTruthy();
     expect(calls.some((c) => c.path === '/agents/a1/pause')).toBe(true);

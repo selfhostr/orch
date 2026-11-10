@@ -184,6 +184,28 @@ describe('My projects', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('asks for confirmation in a dialog before removing a project', async () => {
+    const calls = mockApi({
+      'GET /me': () => ({ json: me }),
+      'GET /projects/mine': () => ({ json: [project] }),
+      'GET /projects/p1/participants': () => ({ json: [] }),
+      'DELETE /projects/p1': () => ({ json: {} }),
+    });
+    renderApp('/projects');
+    const card = await screen.findByRole('article', { name: 'octo/repo' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Remove project' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove' }));
+    const again = await screen.findByRole('dialog', { name: 'Remove project' });
+    fireEvent.click(within(again).getByRole('button', { name: 'Remove project' }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === 'DELETE' && c.path === '/projects/p1')).toBe(true),
+    );
+  });
+
   it('flags re-applications and lets the owner undo a rejection', async () => {
     const bob = { id: 'u3', login: 'bob' };
     const calls = mockApi({

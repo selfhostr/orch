@@ -72,14 +72,14 @@ The HMAC key is the base64-decoded part of the secret after `whsec_`. Always sig
 
 **Rotating the secret.** **Rotate secret** generates a new secret (shown once). For 24 hours, requests are signed with both the new and the previous secret (two space-separated values in `webhook-signature`), so you can deploy the new secret without losing deliveries. Accept a request as soon as one signature matches.
 
-**Test vector.** Use it to check your implementation:
+**Checking your implementation.** Send a test notification from the settings page, then recompute the signature from the three values of that delivery and compare it with `webhook-signature`:
 
 ```text
-secret:    whsec_YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh
-webhook-id: msg_p5jXN8AQM9LWM0D4loKWxJek
-webhook-timestamp: 1614265330
-body:      {"test": 2432232314}
-signature: v1,p/aCZAPUoPHV4ef7o8HCy2oI82P4UXjmN+MG//Bx9gE=
+secret:            <your-signing-secret>
+webhook-id:        <value of the webhook-id header>
+webhook-timestamp: <value of the webhook-timestamp header>
+body:              <raw request body>
+signature:         v1,<base64 HMAC-SHA256 of "<id>.<timestamp>.<body>">
 ```
 
 Node.js (Express: use the raw body, for example `express.raw({ type: 'application/json' })`):
@@ -174,7 +174,7 @@ With browser notifications (Web Push), orch shows a system notification on your 
 2. In the table below, tick **Browser** for the events you want. Without a tick, nothing is sent.
 3. Use **Send test** to check.
 
-It is set up per browser: repeat step 1 on each device you want (up to 10 per member; the oldest is dropped beyond that). Switching the toggle off, or removing the site permission in the browser, stops notifications on that browser.
+It is set up per browser: repeat step 1 on each device you want (up to 10 per member; the oldest is dropped beyond that). Switching the toggle off, or removing the site permission in the browser, stops notifications on that browser. A browser receives the notifications of one member only: if someone else already switched them on in it, the server refuses to move it (`409 push_endpoint_taken`) and the web app then subscribes this browser again with a new endpoint, so you get your own notifications and the other member no longer receives theirs in it.
 
 - **iPhone and iPad** only support Web Push for apps added to the Home Screen: install orch first ({doc}`usage`, "Install as an app").
 - If you blocked notifications for the site earlier, the browser will not ask again: allow them in the browser's site settings.

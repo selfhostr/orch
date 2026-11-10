@@ -39,6 +39,7 @@ Default process and Node.js metrics (`process_*`, `nodejs_*`) plus:
 | `orch_notification_deliveries_total`    | counter   | `channel`, `result`               | External notification attempts (`sent`, `retry`, `failed`) by channel                                                            |
 | `orch_cluster_leader`                   | gauge     | `lease`                           | 1 when this instance holds the `dispatcher` or `maintenance` leadership ({ref}`multi-instance`)                                  |
 | `orch_cluster_leader_changes_total`     | counter   | `lease`, `event`                  | Leadership `acquired`, `lost` or `released` by this instance                                                                     |
+| `orch_retention_purged_rows_total`      | counter   | `table`                           | Rows deleted by the retention purge, by table (`AuditLog`, `WebhookDelivery`, `Assignment`, `Session`, `EnrollmentToken`)        |
 | `orch_cluster_peers`                    | gauge     |                                   | Other live server instances this one knows of                                                                                    |
 | `orch_cluster_messages_total`           | counter   | `direction`, `kind`               | Messages between instances (`in`, `out`) by kind                                                                                 |
 
@@ -61,7 +62,7 @@ docker compose -f compose.yaml -f ../observability/compose.yaml up -d
 - Grafana listens on `127.0.0.1:3001` only (`GRAFANA_PORT`). Reach it through an SSH tunnel (`ssh -L 3001:127.0.0.1:3001 host`) or your own authenticated proxy.
 - The datasource and the **orch overview** dashboard (`deploy/observability/grafana/dashboards/orch.json`) are provisioned automatically: request rate and latency, agents by version, tasks by status, dispatcher tick, offers, assignment outcomes, WebSocket and webhook traffic, process CPU and memory.
 
-The Prometheus and Grafana images are pinned to exact versions in the override (kept up to date by Renovate). Grafana has no anonymous access and sign-up is disabled.
+The Prometheus and Grafana images are pinned to exact versions in the override (kept up to date by Dependabot). Grafana has no anonymous access and sign-up is disabled.
 
 ## Tracing (OpenTelemetry)
 

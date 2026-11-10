@@ -91,12 +91,10 @@ test('owner: Remove asks for confirmation (dismiss keeps the project)', async ({
   const page = await newRole('olivia');
   await page.goto('/projects');
   await settle(page);
-  let asked = '';
-  page.once('dialog', (d) => {
-    asked = d.message();
-    d.dismiss();
-  });
   await page.getByRole('button', { name: 'Remove' }).click();
-  expect(asked).toContain('Remove acme/widgets');
+  const dialog = page.getByRole('dialog', { name: 'Remove project' });
+  await expect(dialog.getByRole('heading', { name: 'Remove acme/widgets?' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
   await expect(page.getByRole('article', { name: 'acme/widgets' })).toBeVisible();
 });

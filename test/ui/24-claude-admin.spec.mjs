@@ -38,6 +38,7 @@ test('access admin: approve/deny/remove, pre-approve, invites, declined list; me
   newRole,
 }) => {
   const page = await newRole('olivia');
+  page.setDefaultTimeout(10_000);
   await page.goto('/admin/access');
   await settle(page);
   await expect(
@@ -53,17 +54,22 @@ test('access admin: approve/deny/remove, pre-approve, invites, declined list; me
     .locator('.list-row', { hasText: 'yan' })
     .getByRole('button', { name: 'Deny' })
     .click();
+  const denyDialog = page.getByRole('dialog', { name: 'Deny request' });
+  await denyDialog.getByRole('button', { name: 'Deny request' }).click();
+  await expect(denyDialog).toBeHidden();
   await expect(page.getByText('yan denied')).toBeVisible();
   const add = page.getByLabel('Add a GitHub login');
   await add.fill('@carl');
   await page.getByRole('button', { name: 'Pre-approve' }).click();
   await expect(page.getByText('carl pre-approved')).toBeVisible();
-  page.once('dialog', (d) => d.accept());
   await page
     .getByRole('region', { name: 'Members' })
     .locator('.list-row', { hasText: 'carl' })
     .getByRole('button', { name: 'Remove' })
     .click();
+  const removeDialog = page.getByRole('dialog', { name: 'Remove member' });
+  await removeDialog.getByRole('button', { name: 'Remove member' }).click();
+  await expect(removeDialog).toBeHidden();
   await expect(page.getByText('carl removed')).toBeVisible();
   await page.getByRole('button', { name: 'Create invite link' }).click();
   await expect(page.getByTestId('invite-url')).toContainText('/invite/');
@@ -72,6 +78,10 @@ test('access admin: approve/deny/remove, pre-approve, invites, declined list; me
     .getByRole('button', { name: 'Revoke' })
     .first()
     .click();
+  const revokeDialog = page.getByRole('dialog', { name: 'Revoke invite link' });
+  await expect(revokeDialog).toBeVisible({ timeout: 10_000 });
+  await revokeDialog.getByRole('button', { name: 'Revoke link' }).click({ timeout: 10_000 });
+  await expect(revokeDialog).toBeHidden();
   await expect(page.getByText('Invite link revoked')).toBeVisible();
   await page.getByText(/Declined \(/).click();
   await settle(page);

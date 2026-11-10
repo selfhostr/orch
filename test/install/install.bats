@@ -128,6 +128,77 @@ F
   case "$output" in *"compose plugin"*) true ;; *) false ;; esac
 }
 
+@test "docker older than 26 is refused with the versions in the message" {
+  cat >"$T/bin/docker" <<'F'
+#!/bin/sh
+[ "$1" = "version" ] && echo 25.0.3
+exit 0
+F
+  run sh "$S" --token t --server https://o.example.com
+  [ "$status" -ne 0 ]
+  case "$output" in *"25.0.3 is too old"*"26"*) true ;; *) false ;; esac
+  [ ! -f "$HOME/orch/.env" ]
+}
+
+@test "an unreachable Docker daemon says what to do" {
+  cat >"$T/bin/docker" <<'F'
+#!/bin/sh
+[ "$1" = "version" ] && exit 1
+exit 0
+F
+  run sh "$S" --token t --server https://o.example.com
+  [ "$status" -ne 0 ]
+  case "$output" in *"cannot talk to the Docker daemon"*"docker group"*) true ;; *) false ;; esac
+}
+
+@test "the plan defaults to pro without a terminal" {
+  run sh "$S" --token t --server https://o.example.com </dev/null
+  [ "$status" -eq 0 ]
+  grep -q '^ORCH_PLAN=pro$' "$HOME/orch/.env"
+}
+
+@test "ORCH_PLAN from the environment is written without asking" {
+  echo pro >"$T/tty"
+  run env ORCH_PLAN=max5 ORCH_TTY="$T/tty" sh "$S" --token t --server https://o.example.com
+  [ "$status" -eq 0 ]
+  grep -q '^ORCH_PLAN=max5$' "$HOME/orch/.env"
+  case "$output" in *"Your Claude plan"*) false ;; *) true ;; esac
+}
+
+@test "an invalid ORCH_PLAN fails before enrolling" {
+  run env ORCH_PLAN=huge sh "$S" --token t --server https://o.example.com
+  [ "$status" -ne 0 ]
+  case "$output" in *"ORCH_PLAN must be pro, max5 or max20"*) true ;; *) false ;; esac
+  run grep -q '/agent/enroll' "$CALLS"
+  [ "$status" -eq 1 ]
+}
+
+@test "with a terminal, the plan is asked and the answer is written" {
+  echo max20 >"$T/tty"
+  run env ORCH_TTY="$T/tty" sh "$S" --token t --server https://o.example.com
+  [ "$status" -eq 0 ]
+  grep -q '^ORCH_PLAN=max20$' "$HOME/orch/.env"
+}
+
+@test "with a terminal, an empty plan answer keeps pro; --yes never asks" {
+  echo >"$T/tty"
+  run env ORCH_TTY="$T/tty" sh "$S" --token t --server https://o.example.com
+  [ "$status" -eq 0 ]
+  grep -q '^ORCH_PLAN=pro$' "$HOME/orch/.env"
+  rm -rf "$HOME/orch"
+  echo max20 >"$T/tty"
+  run env ORCH_TTY="$T/tty" sh "$S" --yes --token t --server https://o.example.com
+  [ "$status" -eq 0 ]
+  grep -q '^ORCH_PLAN=pro$' "$HOME/orch/.env"
+}
+
+@test "rerun keeps the plan chosen at install" {
+  ORCH_PLAN=max5 sh "$S" --token t --server https://o.example.com
+  run sh "$S" --token t --server https://o.example.com </dev/null
+  [ "$status" -eq 0 ]
+  grep -q '^ORCH_PLAN=max5$' "$HOME/orch/.env"
+}
+
 @test "uninstall --yes brings the stack down with volumes and keeps the dir" {
   sh "$S" --token t --server https://o.example.com
   : >"$CALLS"

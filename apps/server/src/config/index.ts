@@ -43,6 +43,38 @@ const ConfigSchema = z.object({
       .transform((v): boolean | string => (v === 'true' ? true : v === 'false' ? false : v)),
   ),
   /**
+   * Hosts an MCP OAuth client may use as an https redirect_uri (comma-separated host names,
+   * optionally with `:port`, compared exactly: no wildcard, no suffix match). Loopback http
+   * (127.0.0.1, [::1], localhost, any port) is always accepted, as RFC 8252 asks. The default
+   * keeps the Claude web connectors working; `none` allows no https host (loopback only). `:443`
+   * is dropped, as URLs carry no default port.
+   */
+  ORCH_OAUTH_REDIRECT_HOSTS: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .default('claude.ai,claude.com')
+      .transform((v) =>
+        v.trim().toLowerCase() === 'none'
+          ? []
+          : v
+              .split(',')
+              .map((s) => s.trim().toLowerCase().replace(/:443$/, ''))
+              .filter(Boolean),
+      )
+      .pipe(
+        z.array(
+          z
+            .string()
+            .max(260)
+            .regex(
+              /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*(?::[1-9][0-9]{0,4})?$/,
+              'host names only (example: claude.ai or app.example.org:8443), no scheme, path or wildcard',
+            ),
+        ),
+      ),
+  ),
+  /**
    * Rate limiting (auth and agent-connect counted in Postgres, the other tiers per instance).
    * Limits are per window (RATE_LIMIT_WINDOW_SEC): API per signed-in user (else per IP), auth/OAuth per IP, webhook per IP, MCP per token,
    * expensive reads per user. 0 on a *_MAX value is not allowed; set RATE_LIMIT_ENABLED=false
@@ -155,6 +187,11 @@ const ConfigSchema = z.object({
   /** How long a user's role on a repository is cached before GitHub is asked again. */
   ORCH_REPO_ACCESS_TTL_SEC: z.coerce.number().int().nonnegative().default(300),
   /**
+   * Same cache for PUBLIC repositories (who may run their tasks): longer, to keep the GitHub
+   * calls of many public projects and members within the installation rate limit.
+   */
+  ORCH_REPO_ACCESS_PUBLIC_TTL_SEC: z.coerce.number().int().nonnegative().default(3600),
+  /**
    * GitHub outage on a private repository: the last verified role is reused if younger than this,
    * then access is denied.
    */
@@ -169,6 +206,35 @@ const ConfigSchema = z.object({
   AGENT_HEARTBEAT_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
   AGENT_SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
   RETENTION_PURGE_INTERVAL_MS: z.coerce.number().int().positive().default(3_600_000),
+  /**
+   * Retention of the tables that only grow, in days; 0 keeps the table forever. Audit entries,
+   * GitHub webhook delivery ids, offers that never started (rejected, expired, cancelled), and
+   * sessions, enrollment tokens expired for that long are deleted by the maintenance leader.
+   */
+  RETENTION_AUDIT_DAYS: z.preprocess(
+    emptyToUndefined,
+    z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(365)
+      .refine((n) => n === 0 || n >= 30, {
+        message:
+          'must be 0 (keep forever) or at least 30 days: the audit log is never purged sooner',
+      }),
+  ),
+  RETENTION_WEBHOOK_DAYS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().nonnegative().default(30),
+  ),
+  RETENTION_ASSIGNMENT_DAYS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().nonnegative().default(90),
+  ),
+  RETENTION_EXPIRED_DAYS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().nonnegative().default(7),
+  ),
   // Several instances (docs/installation.md "Running several server instances").
   /** Unique name of this process among the instances sharing the database (default: hostname). */
   ORCH_INSTANCE_ID: z.preprocess(
@@ -232,6 +298,11 @@ const ConfigSchema = z.object({
   OTEL_EXPORTER_OTLP_ENDPOINT: z.preprocess(emptyToUndefined, z.url().optional()),
   /** Running assignments of an agent unseen (and disconnected) for this long become LOST. */
   AGENT_LEASE_SEC: z.coerce.number().int().positive().default(1_800),
+  /**
+   * A manual claim whose relayed offer got no answer (another instance) waits this long for the
+   * agent's first report, the offer re-sent meanwhile, before it is cancelled.
+   */
+  CLAIM_CONFIRM_SEC: z.coerce.number().int().positive().default(300),
   // Notifications.
   /** Attempts per external delivery (Slack, Discord, webhook, e-mail) before giving up. */
   NOTIFY_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(4),

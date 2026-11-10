@@ -47,6 +47,7 @@ export class Metrics {
   readonly clusterPeers: Gauge;
   readonly notificationJobs: Counter<'channel' | 'result'>;
   readonly repoAccessChecks: Counter<'result'>;
+  readonly retentionPurged: Counter<'table'>;
   private sources: MetricsSources | undefined;
   private tasksFetchedAt = 0;
   private tasksCache: Record<string, number> = {};
@@ -139,6 +140,12 @@ export class Metrics {
       name: 'orch_notification_deliveries_total',
       help: 'External notification delivery attempts, by channel and result (sent, retry, failed).',
       labelNames: ['channel', 'result'],
+      registers,
+    });
+    this.retentionPurged = new Counter({
+      name: 'orch_retention_purged_rows_total',
+      help: 'Rows deleted by the retention purge, by table.',
+      labelNames: ['table'],
       registers,
     });
     this.repoAccessChecks = new Counter({

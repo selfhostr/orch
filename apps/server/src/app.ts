@@ -6,6 +6,7 @@ import { registerAccess } from './access';
 import { registerAvatars, type AvatarFetch } from './avatars';
 import { registerAuth } from './auth';
 import { Cluster } from './cluster';
+import { retentionJob } from './retention';
 import type { Config } from './config';
 import type { PrismaClient } from './db';
 import type { GithubClient } from './github';
@@ -108,7 +109,9 @@ export function buildApp({
   if (prisma) {
     configureRepoAccess(github, {
       ttlMs: config.ORCH_REPO_ACCESS_TTL_SEC * 1000,
+      publicTtlMs: config.ORCH_REPO_ACCESS_PUBLIC_TTL_SEC * 1000,
       graceMs: config.ORCH_REPO_ACCESS_GRACE_SEC * 1000,
+      retryMs: Math.min(30_000, config.ORCH_REPO_ACCESS_GRACE_SEC * 1000),
       observer: {
         count: (result) => metrics.repoAccessChecks.inc({ result }),
         warn: (obj, msg) => app.log.warn(obj, msg),
@@ -118,6 +121,15 @@ export function buildApp({
     const cluster = new Cluster({ prisma, config, log: app.log, metrics });
     app.decorate('cluster', cluster);
     const deps = { config, prisma, github, metrics, cluster };
+    cluster.onMaintenance(
+      retentionJob({
+        prisma,
+        config,
+        log: app.log,
+        metrics,
+        confirmLeader: () => cluster.leadership.confirm('maintenance'),
+      }),
+    );
     const liveLogs = new LiveLogStore();
     const relay = new LiveLogRelay({ store: liveLogs, cluster });
     const gateway = createAgentGateway(app, { ...deps, liveLogs });

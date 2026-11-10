@@ -24,12 +24,14 @@ import { useMe } from '../auth';
 import { errorMessage } from '../i18n/errors.ts';
 import { formatDateTime } from '../i18n/format.ts';
 import { useRich, useT, type MessageKey } from '../i18n/index.ts';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { closeModal } from '../ui/Modal';
 import { motionAllowed } from '../ui/motion';
 import {
   currentSubscription,
+  enableBrowserPush,
   notificationPermission,
   pushSupported,
-  subscribeBrowser,
 } from '../push/browser';
 import { CHANNEL_LABEL, EVENT_META } from '../ui/notificationMeta';
 import { useToast } from '../ui/Toast';
@@ -193,17 +195,21 @@ function SettingsForm({
       ),
   });
 
+  const [confirmRotate, setConfirmRotate] = useState(false);
   const rotate = useMutation({
     mutationFn: rotateWebhookSecret,
     onSuccess: (view) => {
       qc.setQueryData(KEY, reveal(view));
       toast(t('notifications.settings.signing.generated'));
+      closeModal(() => setConfirmRotate(false));
     },
-    onError: (e) =>
+    onError: (e) => {
+      closeModal(() => setConfirmRotate(false));
       toast(
         e instanceof ApiError ? errorMessage(e) : t('notifications.settings.signing.rotateFailed'),
         'info',
-      ),
+      );
+    },
   });
 
   const resend = useMutation({
@@ -334,7 +340,13 @@ function SettingsForm({
                       },
                     )}
                   </span>
-                  <button type="button" disabled={rotate.isPending} onClick={() => rotate.mutate()}>
+                  <button
+                    type="button"
+                    disabled={rotate.isPending}
+                    onClick={() =>
+                      data.webhook.secretHint ? setConfirmRotate(true) : rotate.mutate()
+                    }
+                  >
                     {data.webhook.secretHint
                       ? t('notifications.settings.signing.rotate')
                       : t('notifications.settings.signing.generate')}
@@ -442,6 +454,17 @@ function SettingsForm({
           {t('notifications.settings.save')}
         </button>
       </div>
+      {confirmRotate && (
+        <ConfirmDialog
+          label={t('notifications.settings.signing.rotateLabel')}
+          title={t('notifications.settings.signing.rotateTitle')}
+          body={t('notifications.settings.signing.rotateBody')}
+          confirmLabel={t('notifications.settings.signing.rotate')}
+          pending={rotate.isPending}
+          onConfirm={() => rotate.mutate()}
+          onClose={() => setConfirmRotate(false)}
+        />
+      )}
     </form>
   );
 }
@@ -487,15 +510,7 @@ function BrowserTarget({ data, onTest }: { data: NotificationSettingsView; onTes
         if (permission !== 'denied') toast(t('notifications.settings.browser.notEnabled'), 'info');
         return;
       }
-      const sub = await subscribeBrowser(publicKey);
-      const json = sub.toJSON();
-      if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
-        throw new Error(t('notifications.push.incompleteSubscription'));
-      }
-      await pushSubscribe({
-        endpoint: json.endpoint,
-        keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
-      });
+      await enableBrowserPush(publicKey, pushSubscribe);
       setState('on');
       toast(t('notifications.settings.browser.enabled'));
       await refresh();

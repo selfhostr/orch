@@ -6,6 +6,7 @@ import { ExecError, ManualExecutor, type ExecutorConfig } from '../../src/exec/e
 import { silentLogger } from '../../src/log';
 import { tempDir, waitFor } from '../helpers/util';
 import { CommandError } from '../../src/exec/runner';
+import { STOP_PREPARATION_SCRIPT } from '../../src/exec/sandbox';
 import { BOT_REPO_FILES, botRepoModel } from './compose-fixtures';
 import { FakeDocker, FakeGit, FakeScreen, offer, recordingFs } from './fakes';
 
@@ -137,13 +138,17 @@ describe('ManualExecutor take -> done', () => {
     expect(override.startsWith(join(t.cfg.workDir, 'asg_1', 'src'))).toBe(false);
     const createArgs = t.docker.calls.find((c) => c[0] === 'create')![1] as string[];
     expect(createArgs.join(' ')).not.toContain(CLAUDE_TOKEN);
-    expect(t.docker.createEnv[0]).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: CLAUDE_TOKEN });
-    // Screen session runs claude through docker exec, with the issue as the starting prompt.
+    // The container itself never holds the token (it would be in `docker inspect`).
+    expect(createArgs).toContain('CLAUDE_CODE_OAUTH_TOKEN=');
+    // Screen session runs claude through docker exec, with the issue as the starting prompt; the
+    // token goes to that exec only, by name, its value in the session's environment.
     const argv = t.screen.sessions.get('issue-42')!;
-    expect(argv.slice(0, 9)).toEqual([
+    expect(argv.slice(0, 11)).toEqual([
       'docker',
       'exec',
       '-it',
+      '-e',
+      'CLAUDE_CODE_OAUTH_TOKEN',
       '-w',
       '/workspace',
       rec.container,
@@ -151,8 +156,9 @@ describe('ManualExecutor take -> done', () => {
       '--model',
       'sonnet',
     ]);
-    expect(argv[9]).toContain('Please add a toggle.');
+    expect(argv[11]).toContain('Please add a toggle.');
     expect(argv.join(' ')).not.toContain(CLAUDE_TOKEN);
+    expect(t.screen.envs.get('issue-42')).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: CLAUDE_TOKEN });
     expect(t.of('task.status').map((s) => s.payload.state)).toEqual([
       'preparing',
       'building',
@@ -272,12 +278,39 @@ describe('ManualExecutor take -> done', () => {
     t.ex.handle(offerMsg());
     await t.ex.idle();
     expect(t.docker.calls.find((c) => c[0] === 'pull')).toEqual(['pull', 'python:3.12']);
-    expect(t.docker.calls.find((c) => c[0] === 'exec')?.[2]).toEqual([
-      'sh',
-      '-c',
-      'pip install -e .',
-    ]);
+    const execs = t.docker.calls.filter((c) => c[0] === 'exec').map((c) => c[2]);
+    expect(execs[0]).toEqual(['sh', '-c', 'pip install -e .']);
+    // Then whatever the preparation left running is stopped, before Claude starts.
+    expect(execs[1]).toEqual(['sh', '-c', STOP_PREPARATION_SCRIPT]);
     expect(t.ex.store.get('asg_1')?.builtImage).toBeNull();
+    expect(t.ex.store.get('asg_1')?.state).toBe('running');
+    // No token in any preparation command (argv or container).
+    expect(JSON.stringify(t.docker.calls)).not.toContain(CLAUDE_TOKEN);
+  });
+
+  it('fails the task when the processes left by postCreateCommand cannot be stopped', async () => {
+    const t = setup({
+      files: {
+        '.devcontainer/devcontainer.json': '{"image":"node:22","postCreateCommand":"npm ci"}',
+      },
+    });
+    const exec = t.docker.exec.bind(t.docker);
+    t.docker.exec = async (c: string, argv: string[]) =>
+      argv[2] === STOP_PREPARATION_SCRIPT
+        ? { code: 1, stdout: '', stderr: 'still running' }
+        : exec(c, argv);
+    t.ex.handle(offerMsg());
+    await t.ex.idle();
+    expect(t.ex.store.get('asg_1')).toMatchObject({ state: 'failed' });
+    expect(t.ex.store.get('asg_1')?.error).toMatch(/postCreateCommand/);
+    expect(t.screen.sessions.size).toBe(0);
+  });
+
+  it('runs no stop step without a postCreateCommand', async () => {
+    const t = setup({});
+    t.ex.handle(offerMsg());
+    await t.ex.idle();
+    expect(t.docker.calls.filter((c) => c[0] === 'exec')).toEqual([]);
   });
 
   it('fails the task and reports task.finished failed when preparation breaks', async () => {
@@ -473,7 +506,17 @@ describe('ManualExecutor cleanup and restart', () => {
     const ex2 = t.make();
     await ex2.reconcile();
     expect(ex2.store.get('asg_1')?.state).toBe('running');
-    expect(t.screen.sessions.get('issue-42')?.join(' ')).toContain('--continue');
+    const resumed = t.screen.sessions.get('issue-42')!;
+    expect(resumed.join(' ')).toContain('--continue');
+    // The re-created session hands the token to Claude the same way (the container has none).
+    expect(resumed.slice(0, 5)).toEqual(['docker', 'exec', '-it', '-e', 'CLAUDE_CODE_OAUTH_TOKEN']);
+    expect(resumed.join(' ')).not.toContain(CLAUDE_TOKEN);
+    expect(t.screen.envs.get('issue-42')).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: CLAUDE_TOKEN });
+    // orch attach on a lost session re-creates it with the token too.
+    t.screen.sessions.clear();
+    t.screen.envs.clear();
+    expect(await ex2.attach(42)).toEqual(['screen', '-r', 'issue-42']);
+    expect(t.screen.envs.get('issue-42')).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: CLAUDE_TOKEN });
     expect(t.docker.calls).toContainEqual(['remove', 'orch-task-1-old']);
     expect(t.docker.calls).not.toContainEqual(['remove', rec.container]);
     expect(t.docker.calls).toContainEqual(['removeNetwork', 'orch-net-old']);

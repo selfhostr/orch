@@ -7,6 +7,8 @@
  * - `claude_auth`: the member's Claude login is invalid or expired (401, "Failed to authenticate").
  * - `rate_limited`: the member hit a Claude usage / rate limit.
  * - `timeout`: the run exceeded its S/M/L time limit.
+ * - `access`: the server refused the push token: the member has no write access (any more) to
+ *   the repository on GitHub (`write_access_required`).
  * - `task`: everything else (Claude ran and failed, no changes, push rejected...).
  *
  * Only `task` and `timeout` count toward the dispatcher's per-member shut-out.
@@ -14,13 +16,21 @@
 import { z } from 'zod';
 import { redactSecrets } from '../redact';
 
-export const FailureClass = z.enum(['env', 'claude_auth', 'rate_limited', 'timeout', 'task']);
+export const FailureClass = z.enum([
+  'env',
+  'claude_auth',
+  'rate_limited',
+  'timeout',
+  'task',
+  'access',
+]);
 export type FailureClass = z.infer<typeof FailureClass>;
 
 const AUTH_RE =
   /failed to authenticate|oauth (?:access )?token (?:is |has )?(?:invalid|expired|revoked)|authentication_error|invalid (?:x-)?api[ _-]?key|\b401\b[^\n]{0,80}(?:unauthori[sz]ed|token|auth)|no claude token|please run \/login/i;
 const RATE_RE =
   /^rate limited:|usage limit|limit reached|hit your (?:\w+ )?limit|rate[ _-]?limit|too many requests|\b429\b/i;
+const ACCESS_RE = /\bwrite_access_required\b/;
 const TIMEOUT_RE = /^timed out after\b|\btimed out after \d+ ?min/i;
 /** Messages produced once Claude ran (or after it): never a setup problem. */
 const AFTER_RUN_RE = /^(?:claude exited\b|push failed\b|no changes\b|no_changes$)/i;
@@ -31,6 +41,7 @@ const ENV_RE =
 export function classifyFailure(error: string | null | undefined): FailureClass {
   const e = (error ?? '').trim();
   if (!e) return 'task';
+  if (ACCESS_RE.test(e)) return 'access';
   if (AUTH_RE.test(e)) return 'claude_auth';
   if (RATE_RE.test(e)) return 'rate_limited';
   if (TIMEOUT_RE.test(e)) return 'timeout';

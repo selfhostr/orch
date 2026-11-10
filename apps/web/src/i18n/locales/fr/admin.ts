@@ -13,6 +13,26 @@ export default {
     preApprove: 'Pré-approuver',
     createInvite: 'Créer un lien d’invitation',
   },
+  confirm: {
+    remove: {
+      label: 'Retirer le membre',
+      title: 'Retirer {login} ?',
+      body: 'Retirer {login} ? Son accès au serveur sera refusé jusqu’à ce qu’un administrateur l’approuve à nouveau.',
+      action: 'Retirer le membre',
+    },
+    deny: {
+      label: 'Refuser la demande',
+      title: 'Refuser {login} ?',
+      body: 'La demande est refusée. La personne pourra être approuvée plus tard depuis la liste des refus.',
+      action: 'Refuser la demande',
+    },
+    revokeInvite: {
+      label: 'Révoquer le lien d’invitation',
+      title: 'Révoquer ce lien d’invitation ?',
+      body: 'Plus personne ne peut s’inscrire avec ce lien. Cette action est définitive.',
+      action: 'Révoquer le lien',
+    },
+  },
   pending: {
     title: 'Demandes en attente',
     none: 'Aucune demande en attente.',
@@ -22,8 +42,6 @@ export default {
     none: 'Aucun membre approuvé pour l’instant.',
     approvedBy: 'approuvé par {name}',
     addLogin: 'Ajouter un login GitHub',
-    confirmRemove:
-      'Retirer {login} ? Son accès au serveur sera refusé jusqu’à ce qu’un administrateur l’approuve à nouveau.',
   },
   invites: {
     title: 'Liens d’invitation',
@@ -57,6 +75,8 @@ export default {
     logins: 'Logins',
     orgs: 'Organisations',
     admins: 'Administrateurs',
+    bound: 'compte GitHub {id}',
+    unbound: 'pas encore rattaché, la première connexion avec ce login le rattache',
     none: 'aucun',
   },
   declined: 'Refusés ({count})',

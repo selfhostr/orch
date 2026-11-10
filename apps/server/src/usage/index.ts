@@ -1,4 +1,4 @@
-import type { UsageReport } from '@prisma/client';
+import { Prisma, type UsageReport } from '@prisma/client';
 import type { AgentUsageSummary, UsageReportPayload } from '@orch/shared';
 import type { PrismaClient } from '../db';
 
@@ -20,13 +20,26 @@ export function claudeAuthUpdate(
   return { claudeAuthValid: false, claudeAuthInvalidAt: new Date() };
 }
 
-/** Stores one usage report and bumps Agent.lastUsageAt. */
+/** The dedupe row of the message being processed no longer exists (see recordUsage). */
+export class MessageSeenGoneError extends Error {
+  constructor(messageId: string) {
+    super(`Dedupe row of message ${messageId} is gone`);
+  }
+}
+
+/**
+ * Stores one usage report and bumps Agent.lastUsageAt. With `messageId` (an acked agent message),
+ * its dedupe row gets its ack in the same transaction, and nothing is stored when it already has
+ * one: a message processed again (see the gateway) never counts its tokens twice. Returns false
+ * when it was already stored.
+ */
 export async function recordUsage(
   prisma: PrismaClient,
   agent: { id: string; userId: string },
   p: UsageReportPayload,
   now: Date = new Date(),
-): Promise<void> {
+  messageId?: string,
+): Promise<boolean> {
   // A rate limit known from a failed run (or an earlier report) holds until it lapses, even if
   // this report did not see it.
   const prev = await prisma.usageReport.findFirst({
@@ -44,8 +57,24 @@ export async function recordUsage(
     where: { id: agent.id },
     select: { claudeAuthValid: true },
   });
-  await prisma.$transaction([
-    prisma.usageReport.create({
+  return prisma.$transaction(async (tx) => {
+    if (messageId) {
+      const acked = await tx.agentMessageSeen.updateMany({
+        where: { agentId: agent.id, messageId, ack: { equals: Prisma.DbNull } },
+        data: { ack: { ok: true } },
+      });
+      if (acked.count !== 1) {
+        const row = await tx.agentMessageSeen.findUnique({
+          where: { agentId_messageId: { agentId: agent.id, messageId } },
+          select: { agentId: true },
+        });
+        // Acked by another processing: stored already. Row gone (removed after a failed
+        // processing): an error, so that no ack is sent and the agent sends the report again.
+        if (row) return false;
+        throw new MessageSeenGoneError(messageId);
+      }
+    }
+    await tx.usageReport.create({
       data: {
         agentId: agent.id,
         userId: agent.userId,
@@ -63,16 +92,17 @@ export async function recordUsage(
         rateLimitedUntil,
         source: p.source,
       },
-    }),
-    prisma.agent.update({
+    });
+    await tx.agent.update({
       where: { id: agent.id },
       data: {
         lastUsageAt: now,
         ...(p.claudeTokenPresent !== undefined && { claudeTokenPresent: p.claudeTokenPresent }),
         ...claudeAuthUpdate(current, p.claudeAuthValid),
       },
-    }),
-  ]);
+    });
+    return true;
+  });
 }
 
 export function toUsageSummary(r: UsageReport): AgentUsageSummary {

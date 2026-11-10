@@ -3,6 +3,7 @@ export default {
   unknown: 'Something went wrong.',
   network: 'The server cannot be reached. Check your connection and try again.',
   requestFailed: 'Request failed ({status})',
+  requestFailedCode: 'Request failed ({status}): {code}',
   api: {
     access_suspended: 'Your access to this server was removed by an admin.',
     agent_offline: 'Agent is offline',
@@ -18,9 +19,12 @@ export default {
       'This agent still uses the old image (ghcr.io/theroxat). Switch it to ghcr.io/selfhostr once by hand: see Updating agents in the docs.',
     no_agent_online: 'Your machine is offline: start your agent first.',
     not_participating: 'You no longer participate in this project.',
+    not_cancellable: 'This task has already started and cannot be cancelled.',
     not_retryable: 'This task cannot be retried.',
     offer_closed: 'This request is no longer available: it was taken, withdrawn or has expired.',
     paused: 'Your agent is paused: resume it in My Server first.',
+    push_endpoint_taken:
+      'This browser already receives the notifications of another member: they must switch them off first.',
     push_not_configured: 'This server has no VAPID keys set.',
     server_version_unknown: 'This server runs a dev build.',
     task_cancelled: 'This task was cancelled.',
