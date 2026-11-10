@@ -29,6 +29,7 @@ const FAILURE_LABEL = {
   rate_limited: 'history.failure.rate_limited',
   timeout: 'history.failure.timeout',
   task: 'history.failure.task',
+  access: 'history.failure.access',
 } as const satisfies Record<FailureClass, MessageKey>;
 
 const COLUMNS = {

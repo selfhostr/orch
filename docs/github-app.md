@@ -40,7 +40,7 @@ Also subscribe to **Member** (collaborator added, removed or changed), **Reposit
 1. Copy the **App ID** to `GITHUB_APP_ID`, and the **slug** from the App's public URL (`github.com/apps/<slug>`) to `GITHUB_APP_SLUG`.
 2. Under **Client secrets**, generate one. Put the **Client ID** in `GITHUB_CLIENT_ID` and the secret in `GITHUB_CLIENT_SECRET`.
 3. Under **Private keys**, generate one and save the `.pem` as `deploy/server/secrets/github-app.pem` (see {doc}`installation`). It is read-only inside the server container. Never commit it; `*.pem` is git-ignored.
-4. Restart: `docker compose up -d`.
+4. Start the server with `docker compose up -d`, or restart it if it is already running.
 
 ```{important}
 Because a `Contents: write` installation token can push to any branch, **enable branch protection on your default branches**: orch only pushes `orch/issue-<n>-*` branches and opens PRs, but protection keeps that guarantee even if something goes wrong.

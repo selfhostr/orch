@@ -20,6 +20,7 @@ import {
 import pg from 'pg';
 import { encrypt } from '../src/auth/crypto';
 import { channelOf, lockClassOf } from '../src/cluster';
+import { SHUT_OUT } from '../src/dispatch/snapshot';
 import { SharedCounter, SharedRateLimiter } from '../src/http/shared-limit';
 import { LiveLogStore } from '../src/logs/store';
 import type { PostResult } from '../src/notifications/ssrf';
@@ -238,8 +239,8 @@ describe('two instances, one database', () => {
       (await api(a, owner)('POST', '/api/projects', { githubRepoId: repo.githubRepoId })).json(),
     );
     member = await loginAs(a, gh);
-    // A participant of a private repository needs a GitHub role on it to be offered its tasks.
-    gh.roles.set(`${repo.installationId}:${repo.fullName}:${member.login}`, 'READ');
+    // Running a task needs GitHub write access to the repository (the run pushes a branch).
+    gh.roles.set(`${repo.installationId}:${repo.fullName}:${member.login}`, 'WRITE');
     await prisma.participation.create({
       data: {
         userId: member.userId,
@@ -586,6 +587,187 @@ describe('two instances: hardening', () => {
     const after = await prisma.notificationJob.findUnique({ where: { id: row.id } });
     expect(after).toMatchObject({ status: 'SENDING', attempts: 2, instanceId: 'the-other-worker' });
     await prisma.notificationJob.delete({ where: { id: row.id } });
+  });
+});
+
+describe('two instances: a relayed claim without an answer', () => {
+  const C3 = `r${uid()}`.slice(0, 40);
+  let e: FastifyInstance;
+  let f: FastifyInstance;
+  let owner: TestUser;
+  let member: TestUser;
+  let projectId: string;
+  let agent: Awaited<ReturnType<typeof onlineAgent>>;
+
+  beforeAll(async () => {
+    e = instance('e', C3);
+    await e.listen({ port: 0, host: '127.0.0.1' });
+    f = instance('f', C3);
+    await f.listen({ port: 0, host: '127.0.0.1' });
+    await until(() => e.cluster.hasPeers() && f.cluster.hasPeers());
+    owner = await loginAs(e, gh);
+    const repo = repoFor();
+    gh.repos.set(owner.token, [repo]);
+    projectId = ProjectViewSchema.parse(
+      (await api(e, owner)('POST', '/api/projects', { githubRepoId: repo.githubRepoId })).json(),
+    ).id;
+    member = await loginAs(e, gh);
+    await prisma.participation.create({
+      data: {
+        userId: member.userId,
+        projectId,
+        active: true,
+        approvedAt: new Date(),
+        percent: 50,
+        mode: 'APPROVAL',
+      },
+    });
+    // The socket is on F: E relays the offer.
+    agent = await onlineAgent(member, e, f);
+    await until(() => e.agentGateway.isConnected(agent.agentId));
+  });
+  afterAll(async () => {
+    await e?.close();
+    await f?.close();
+  });
+
+  async function newTask() {
+    const res = await api(e, owner)('POST', `/api/projects/${projectId}/tasks`, {
+      title: 'Take me',
+      body: 'By hand.',
+      size: 'S',
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return TaskViewSchema.parse(res.json());
+  }
+
+  /** E's next relay request gets no answer; `deliver`: F still sends the offer to the agent. */
+  function noAnswer(deliver: boolean) {
+    const bus = e.cluster.bus;
+    const real = bus.request.bind(bus);
+    vi.spyOn(bus, 'request').mockImplementationOnce(async (to, kind, data, ms) => {
+      if (deliver) await real(to, kind, data, ms);
+      throw new Error(`no answer from ${to} to ${kind}`);
+    });
+  }
+
+  const take = (t: TaskView) =>
+    e.agentGateway.claimForUser(member.userId, {
+      projectFullName: t.projectFullName,
+      issueNumber: t.issueNumber,
+    });
+  const lapse = (now: Date) =>
+    (e.dispatcher as unknown as { expireLeases(now: Date): Promise<void> }).expireLeases(now);
+  const resend = (now: Date) =>
+    (
+      e.dispatcher as unknown as { resendUnconfirmedClaims(now: Date): Promise<void> }
+    ).resendUnconfirmedClaims(now);
+  const inMs = (ms: number) => new Date(Date.now() + ms);
+  // After the claim's short lease (CLAIM_CONFIRM_SEC, 5 min by default).
+  const later = () => inMs(6 * 60_000);
+  const offersFor = (id: string) =>
+    agent.client.msgs.filter((m) => m.type === 'task.offer' && m.payload.assignmentId === id)
+      .length;
+  /** Leaves no live claim behind for the next test. */
+  async function finish(assignmentId: string, taskId: string) {
+    await prisma.assignment.update({ where: { id: assignmentId }, data: { status: 'FAILED' } });
+    await prisma.task.update({ where: { id: taskId }, data: { status: 'DONE' } });
+  }
+  /** Ended without excluding the member: CANCELLED (not LOST, which SHUT_OUT counts). */
+  async function expectNeutralUndo(assignmentId: string, taskId: string) {
+    const row = await prisma.assignment.findUniqueOrThrow({ where: { id: assignmentId } });
+    expect(row.status).toBe('CANCELLED');
+    expect(SHUT_OUT as readonly string[]).not.toContain(row.status);
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: taskId } })).status).toBe('TODO');
+  }
+
+  it('keeps the claim and lets the agent confirm it with its first report', async () => {
+    const t = await newTask();
+    noAnswer(true);
+    const r = await take(t);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const row = await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } });
+    expect(row.status).toBe('ACCEPTED');
+    expect(row.leaseExpiresAt).not.toBeNull();
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status).toBe(
+      'IN_PROGRESS',
+    );
+    await agent.client.next('task.offer', (m) => m.payload.assignmentId === r.assignmentId);
+    // The late answer: the agent starts the run.
+    const ack = await agent.client.call(
+      agentMessage('task.status', { assignmentId: r.assignmentId, seq: 1, state: 'preparing' }),
+    );
+    expect(ack.ok).toBe(true);
+    await lapse(later());
+    const after = await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } });
+    expect(after.status).toBe('RUNNING');
+    await prisma.assignment.update({ where: { id: r.assignmentId }, data: { status: 'FAILED' } });
+  });
+
+  it('sends the offer again when the agent says hello without it', async () => {
+    const t = await newTask();
+    noAnswer(false);
+    const r = await take(t);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const re = await reconnect(agent.credential, f);
+    agent = { ...agent, ...re };
+    await agent.client.next('task.offer', (m) => m.payload.assignmentId === r.assignmentId);
+    const offer = agent.client.msgs.find(
+      (m) => m.type === 'task.offer' && m.payload.assignmentId === r.assignmentId,
+    );
+    expect(offer?.type === 'task.offer' && offer.payload).toMatchObject({
+      kind: 'CLAIM',
+      initiatedBy: 'server',
+      accepted: true,
+    });
+    expect(
+      (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status,
+    ).toBe('ACCEPTED');
+    await finish(r.assignmentId, t.id);
+  });
+
+  it('sends the offer again twice during the short lease, not at every tick', async () => {
+    const t = await newTask();
+    noAnswer(false);
+    const r = await take(t);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const id = r.assignmentId;
+    expect(offersFor(id)).toBe(0);
+    await resend(inMs(30_000));
+    await resend(inMs(60_000));
+    expect(offersFor(id)).toBe(0);
+    await resend(inMs(110_000));
+    await until(() => offersFor(id) === 1);
+    await resend(inMs(120_000));
+    await resend(inMs(210_000));
+    await until(() => offersFor(id) === 2);
+    await resend(inMs(280_000));
+    await resend(inMs(290_000));
+    await new Promise((res) => setTimeout(res, 300));
+    expect(offersFor(id)).toBe(2);
+    await finish(id, t.id);
+  });
+
+  it('cancels the claim, without shutting the member out, when the short lease ends', async () => {
+    const t = await newTask();
+    noAnswer(false);
+    const r = await take(t);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    await lapse(inMs(4 * 60_000));
+    expect(
+      (await prisma.assignment.findUniqueOrThrow({ where: { id: r.assignmentId } })).status,
+    ).toBe('ACCEPTED');
+    await lapse(later());
+    await expectNeutralUndo(r.assignmentId, t.id);
+    // The member can take it again at once.
+    noAnswer(false);
+    const again = await take(t);
+    expect(again.ok).toBe(true);
+    if (again.ok) await finish(again.assignmentId, t.id);
   });
 });
 

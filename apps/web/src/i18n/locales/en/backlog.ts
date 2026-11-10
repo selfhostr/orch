@@ -12,6 +12,7 @@ export default {
       other: 'Imported {count} issue(s), {already} already imported.',
     },
     approved: '#{number} approved and moved to To do',
+    cancelled: '#{number} cancelled',
     notOnBoard: 'This task is not on the board (it may belong to a project you cannot see).',
     nothingHere: 'Nothing here',
   },
@@ -41,13 +42,28 @@ export default {
     needsAttentionReason: 'Needs attention: {reason}',
     retry: 'Retry',
     retryLabel: 'Retry #{number}',
+    cancel: 'Cancel',
+    cancelLabel: 'Cancel #{number}',
     approve: 'Approve',
     approveLabel: 'Approve #{number}',
     takeIt: 'Take it: <code>orch take {number}</code>',
   },
+  cancel: {
+    label: 'Cancel task',
+    title: 'Cancel task #{number}?',
+    body: '{title} will leave the board and will not run. The GitHub issue stays open.',
+    dependents: {
+      one: '{count} task depends on this one ({list}) and will stay blocked.',
+      other: '{count} tasks depend on this one ({list}) and will stay blocked.',
+    },
+    keep: 'Keep task',
+    confirm: 'Cancel task',
+  },
   why: {
     summary: "Why isn't this running?",
     noParticipant: 'No active participant.',
+    noWriter:
+      'No participant has write access to this repository on GitHub. Tasks only run for members with Write, Maintain or Admin access.',
     eligible: 'eligible',
   },
   logs: {

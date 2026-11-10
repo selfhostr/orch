@@ -32,10 +32,11 @@ export default {
     sharedTemplates: 'Shared templates',
     participateHelp: {
       GITHUB:
-        'Only people who are collaborators on the GitHub repository can lend their Claude capacity. Anyone else is told to ask you for access.',
+        'Only people who are collaborators on the GitHub repository can join. Anyone else is told to ask you for access. Tasks only run for those with write access.',
       ALLOWLIST:
-        'Only people you or an admin explicitly allowed on this server can lend their Claude capacity, whether or not they are GitHub collaborators.',
-      ALL_MEMBERS: 'Every user of this orch server can lend their Claude capacity to this project.',
+        'Only people you or an admin explicitly allowed on this server can join. Tasks only run for those with write access to the GitHub repository.',
+      ALL_MEMBERS:
+        'Every user of this orch server can join this project. Tasks only run for those with write access to the GitHub repository.',
     },
   },
   reject: {

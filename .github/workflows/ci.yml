@@ -38,7 +38,7 @@ jobs:
         run: ./dev test:backup
 
   licences:
-    name: Licences (OSI allow-list)
+    name: Licences and advisories
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -51,6 +51,9 @@ jobs:
         run: ./dev build-tools && ./dev pnpm install --frozen-lockfile
       - name: Check licences
         run: ./dev pnpm run check:licences
+      # Production dependencies of every workspace, from the lockfile: high and critical advisories fail.
+      - name: Audit production dependencies
+        run: ./dev pnpm audit --prod --audit-level=high
 
   ui:
     name: Browser UI tests (Playwright, Docker)

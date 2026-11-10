@@ -53,7 +53,13 @@ const OFFER_RELAY_TIMEOUT_MS = 5_000;
 /** A duplicate seen this recently without a stored ack is still being processed (no answer). */
 const DUPLICATE_IN_FLIGHT_MS = 5 * 60_000;
 
-export type OfferRefusal = 'offline' | 'paused' | 'revoked' | 'no_consent' | 'access_suspended';
+/**
+ * `unconfirmed`: relayed to the instance holding the socket, without an answer. The agent may have
+ * received it: the caller keeps the offer or claim as it is and lets the agent's next message
+ * (accept, progress, `hello`) or the offer's expiry decide.
+ */
+export type OfferRefusal =
+  'offline' | 'paused' | 'revoked' | 'no_consent' | 'access_suspended' | 'unconfirmed';
 
 export class OfferRefusedError extends Error {
   constructor(readonly reason: OfferRefusal) {
@@ -520,8 +526,8 @@ export class AgentGateway {
       }
       return;
     }
-    // On another instance: it sends, and says whether its socket took the offer. No answer counts
-    // as offline (the caller undoes the claim or closes the offer, as for a socket that closed).
+    // On another instance: it sends, and says whether its socket took the offer. `false` is
+    // offline. No answer (timeout, lost reply) is not: the offer may have reached the agent.
     const r = this.remote(agentId);
     if (!r) throw new OfferRefusedError('offline');
     const delivered = await this.deps
@@ -531,7 +537,8 @@ export class AgentGateway {
         { agentId, payload },
         OFFER_RELAY_TIMEOUT_MS,
       )
-      .catch(() => false);
+      .catch(() => null);
+    if (delivered === null) throw new OfferRefusedError('unconfirmed');
     if (!delivered) throw new OfferRefusedError('offline');
   }
 
@@ -539,7 +546,10 @@ export class AgentGateway {
    * M5 `take_task`: the member claims a task for one of their online, unpaused machines through
    * the same claim path as `orch take` (manual mode), then the server tells that agent to start
    * it with `task.offer` kind CLAIM, `initiatedBy: "server"`. If the offer cannot be delivered the
-   * claim is undone (task back to TODO).
+   * claim is undone (task back to TODO). A relayed offer without an answer keeps the claim, with a
+   * short lease: the agent's first progress report confirms it, the offer is re-sent meanwhile (at
+   * a `hello` without it, and by the dispatcher), and the lease's end cancels it without excluding
+   * the member (see the dispatcher's undoUnconfirmedClaim).
    */
   async claimForUser(
     userId: string,
@@ -601,6 +611,30 @@ export class AgentGateway {
       await this.sendOffer(best.id, offer);
     } catch (err) {
       if (!(err instanceof OfferRefusedError)) throw err;
+      if (err.reason === 'unconfirmed') {
+        await prisma.assignment.updateMany({
+          where: { id: offer.assignmentId, status: 'ACCEPTED', startedAt: null },
+          // Short (CLAIM_CONFIRM_SEC): the task is out of the pool for the whole team meanwhile,
+          // and the agent may never have received it. The dispatcher re-sends the offer.
+          data: {
+            leaseExpiresAt: new Date(Date.now() + this.deps.config.CLAIM_CONFIRM_SEC * 1000),
+          },
+        });
+        await audit(prisma, {
+          actorUserId: userId,
+          agentId: best.id,
+          action: 'task.claim_unconfirmed',
+          projectId: offer.task.project.id,
+          taskId: offer.task.taskId,
+          data: { assignmentId: offer.assignmentId, via: 'mcp' },
+        });
+        return {
+          ok: true,
+          assignmentId: offer.assignmentId,
+          agentId: best.id,
+          machineName: best.name,
+        };
+      }
       await prisma.$transaction([
         prisma.assignment.updateMany({
           where: { id: offer.assignmentId, status: 'ACCEPTED' },
@@ -721,9 +755,8 @@ export class AgentGateway {
       await prisma.agentMessageSeen.create({ data: { agentId: c.agentId, messageId: m.id } });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        return this.ackDuplicate(c, m.id);
-      }
-      throw err;
+        if (!(await this.ackDuplicate(c, m.id))) return;
+      } else throw err;
     }
     let result: AckPayload;
     const after: Array<() => void> = [];
@@ -745,19 +778,38 @@ export class AgentGateway {
 
   /**
    * Replays the first answer. Still being processed: no ack, the agent outbox resends later.
-   * A row without a stored ack long after it was seen (written before acks were stored, or the
-   * process died mid-way) keeps the old plain duplicate answer.
+   * A row without a stored ack long after it was seen means the first processing died mid-way, or
+   * is only slow and still running (a slow GitHub call): either way the resend takes the row over
+   * and the message is processed again, possibly while the first one finishes. Returns true when
+   * the caller must process it. Only one of two concurrent resends wins the takeover.
+   *
+   * Processing again changes no state twice: progress messages are guarded by `lastSeq` and the
+   * assignment status, `offer.accept` replays, `usage.report` writes its ack with the report,
+   * `pause.set`, `claude.auth` and `update.status` set values, and a replayed `task.claim` or
+   * `offer.reject` is refused. Audit rows are not deduplicated: `pause.set`, `update.status` and
+   * `done.request` may log their event twice after a crash or a takeover.
    */
-  private async ackDuplicate(c: Conn, messageId: string): Promise<void> {
-    const seen = await this.deps.prisma.agentMessageSeen.findUnique({
+  private async ackDuplicate(c: Conn, messageId: string): Promise<boolean> {
+    const { prisma } = this.deps;
+    const seen = await prisma.agentMessageSeen.findUnique({
       where: { agentId_messageId: { agentId: c.agentId, messageId } },
     });
-    if (seen?.ack) {
+    if (!seen) return false; // Processing failed and the row was removed: the next resend runs.
+    if (seen.ack) {
       this.ack(c, messageId, { ...(seen.ack as AckPayload), duplicate: true });
-      return;
+      return false;
     }
-    if (seen && Date.now() - seen.seenAt.getTime() < DUPLICATE_IN_FLIGHT_MS) return;
-    this.ack(c, messageId, { ok: true, duplicate: true });
+    if (Date.now() - seen.seenAt.getTime() < DUPLICATE_IN_FLIGHT_MS) return false;
+    const taken = await prisma.agentMessageSeen.updateMany({
+      where: {
+        agentId: c.agentId,
+        messageId,
+        seenAt: seen.seenAt,
+        ack: { equals: Prisma.DbNull },
+      },
+      data: { seenAt: new Date() },
+    });
+    return taken.count === 1;
   }
 
   /**
@@ -884,7 +936,7 @@ export class AgentGateway {
     });
     switch (m.type) {
       case 'usage.report':
-        await recordUsage(prisma, { id: c.agentId, userId: c.userId }, m.payload);
+        await recordUsage(prisma, { id: c.agentId, userId: c.userId }, m.payload, new Date(), m.id);
         return { ok: true };
       case 'claude.auth': {
         const p = m.payload;

@@ -24,7 +24,8 @@ case "$cmd" in
   test:install)
     docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable install.sh
     docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable -x -P deploy/server/backup deploy/server/backup/*.sh test/backup/integration.sh
-    docker run --rm -v "$PWD:/mnt" -w /mnt bats/bats:latest test/install test/backup
+    docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable scripts/release-guard.sh
+    docker run --rm -v "$PWD:/mnt" -w /mnt bats/bats:latest test/install test/backup test/release
     ;;
   test:backup) exec ./test/backup/integration.sh ;;
   test:ui)

@@ -73,6 +73,8 @@ export default {
     logins: 'Logins',
     orgs: 'Organizations',
     admins: 'Admins',
+    bound: 'GitHub account {id}',
+    unbound: 'not bound yet: the first sign-in with this login binds it',
     none: 'none',
   },
   declined: 'Declined ({count})',

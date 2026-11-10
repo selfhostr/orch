@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import type { AccessGrant, AccessGrantStatus, User } from '@prisma/client';
+import type { AccessGrant, AccessGrantStatus, EnvLoginKind, User } from '@prisma/client';
 import type { ApiUser } from '@orch/shared';
 import { audit } from '../audit';
 import type { Cluster } from '../cluster';
@@ -13,6 +13,8 @@ import {
   ACCESS_REQUEST_TTL_MS,
   INVITE_COOKIE,
   INVITE_COOKIE_PURPOSE,
+  findGrant,
+  releaseGrantLogin,
   useInvite,
 } from '../access/core';
 import { declinedPage, requestAccessPage } from '../access/pages';
@@ -59,18 +61,34 @@ export interface Allowlist {
   check(user: User): Promise<'allowed' | 'refused' | 'reauth'>;
   /**
    * Admin OR env login OR allowed-org member OR APPROVED access grant (or no restriction at all).
-   * `githubId`: an APPROVED grant bound to another GitHub account id (renamed login) is ignored.
+   * Env logins and grants follow the GitHub account id: one bound to another account (the login
+   * was renamed and reused) does not apply, and a DENIED grant follows a renamed account.
    */
   isAllowed(
     login: string,
+    githubId: bigint,
     accessToken: () => Promise<string>,
     cacheKey?: string,
-    githubId?: bigint,
+    /** The login comes from GitHub just now (sign-in): an unbound listed login may be bound. */
+    verified?: boolean,
   ): Promise<boolean>;
-  /** ORCH_ADMIN_GITHUB_LOGINS member. */
-  isAdmin(login: string): boolean;
-  /** Drops the cached access-grant decision of a login (after approve, deny or remove). */
+  /**
+   * Admin: a login of ORCH_ADMIN_GITHUB_LOGINS bound to this GitHub account (see envRight). The
+   * first account that signs in with a listed login is bound to it.
+   */
+  isAdmin(user: Pick<User, 'login' | 'githubId'>): Promise<boolean>;
+  /** The access grant that applies to a GitHub account (see findGrant). */
+  grantFor(login: string, githubId: bigint): Promise<AccessGrant | null>;
+  /** Drops the cached access-grant decisions (after approve, deny or remove). */
   invalidate(login: string): void;
+  /**
+   * Binds the env logins that are not bound yet to the users who already signed in with them,
+   * once GitHub confirms that account still has that login (an existing installation keeps its
+   * admins). Nothing is bound when GitHub disagrees or cannot answer: the next sign-in binds.
+   */
+  bindExisting(): Promise<void>;
+  /** Bindings of the listed logins, for the Access page. */
+  bindingsView(): Promise<Array<{ kind: EnvLoginKind; login: string; githubUserId: string }>>;
 }
 
 /** A relative in-app path that is safe to redirect to after sign-in, or null. */
@@ -141,7 +159,11 @@ export function requireUser(req: FastifyRequest): User {
   return req.user;
 }
 
-export function createAllowlist(deps: AuthDeps): Allowlist {
+interface WarnLog {
+  warn(obj: Record<string, unknown>, msg: string): void;
+}
+
+export function createAllowlist(deps: AuthDeps, log?: WarnLog): Allowlist {
   const { config, prisma } = deps;
   const envRestricted = signInIsRestricted(config);
   const ttl = config.ORCH_ALLOWLIST_CACHE_SEC * 1000;
@@ -153,11 +175,8 @@ export function createAllowlist(deps: AuthDeps): Allowlist {
   // Entries outlive the TTL: they are the last known decision used during a GitHub outage.
   const orgCache = new Map<string, { ok: boolean; at: number }>();
   const orgFailures = new Map<string, { at: number; err: unknown }>();
-  // Access grants by lower-cased login (same TTL), dropped by invalidate() on admin decisions.
-  const grantCache = new Map<
-    string,
-    { status: AccessGrantStatus | null; githubId: bigint | null; at: number }
-  >();
+  // Access grant status by `login:githubId` (same TTL), dropped by invalidate() on decisions.
+  const grantCache = new Map<string, { status: AccessGrantStatus | null; at: number }>();
   // Whether any APPROVED grant exists: it restricts sign-in even with no env allowlist.
   let anyApproved: { v: boolean; at: number } | null = null;
   const fresh = (at: number) => ttl > 0 && Date.now() - at < ttl;
@@ -171,51 +190,227 @@ export function createAllowlist(deps: AuthDeps): Allowlist {
     return v;
   }
 
-  /**
-   * Status of the login's access grant, or null. A grant bound to another GitHub account id (the
-   * login was renamed and reused) does not apply to this one.
-   */
-  async function grantStatus(login: string, githubId?: bigint): Promise<AccessGrantStatus | null> {
-    let hit = grantCache.get(login);
+  const grantFor = (login: string, githubId: bigint) => findGrant(prisma, login, githubId);
+
+  /** Status of the access grant that applies to this account (see findGrant), or null. */
+  async function grantStatus(login: string, githubId: bigint): Promise<AccessGrantStatus | null> {
+    const key = `${login}:${githubId}`;
+    let hit = grantCache.get(key);
     if (!hit || !fresh(hit.at)) {
-      const g = await prisma.accessGrant.findUnique({ where: { githubLogin: login } });
-      hit = { status: g?.status ?? null, githubId: g?.githubUserId ?? null, at: Date.now() };
-      if (ttl > 0) grantCache.set(login, hit);
+      hit = { status: (await grantFor(login, githubId))?.status ?? null, at: Date.now() };
+      if (ttl > 0) grantCache.set(key, hit);
     }
-    if (githubId !== undefined && hit.githubId !== null && hit.githubId !== githubId) return null;
     return hit.status;
   }
 
-  const isAdmin = (login: string) => config.ORCH_ADMIN_GITHUB_LOGINS.includes(login.toLowerCase());
+  // ---- env logins bound to a GitHub account id ----
+  const envLists: Record<EnvLoginKind, string[]> = {
+    ADMIN: config.ORCH_ADMIN_GITHUB_LOGINS,
+    ALLOWED: config.ORCH_ALLOWED_GITHUB_LOGINS,
+  };
+  // A binding never changes once made (the first account wins): cached for good.
+  const bindings = new Map<string, bigint>(); // `kind:login` -> GitHub account id
+  // Logins bound to an account id (for renamed accounts), same TTL as the other caches.
+  const boundTo = new Map<string, { logins: string[]; at: number }>(); // `kind:githubId`
 
-  function forget(login: string): void {
-    grantCache.delete(login.toLowerCase());
+  async function bindingOf(kind: EnvLoginKind, login: string): Promise<bigint | null> {
+    const hit = bindings.get(`${kind}:${login}`);
+    if (hit !== undefined) return hit;
+    const b = await prisma.envLoginBinding.findUnique({
+      where: { kind_githubLogin: { kind, githubLogin: login } },
+    });
+    if (b) bindings.set(`${kind}:${login}`, b.githubUserId);
+    return b?.githubUserId ?? null;
+  }
+
+  /** Binds a listed login to an account unless another one got it first; returns the owner. */
+  async function claim(kind: EnvLoginKind, login: string, githubId: bigint): Promise<bigint> {
+    try {
+      await prisma.envLoginBinding.create({
+        data: { kind, githubLogin: login, githubUserId: githubId },
+      });
+    } catch (err) {
+      const owner = await bindingOf(kind, login); // bound concurrently (another instance)
+      if (owner === null) throw err;
+      return owner;
+    }
+    bindings.set(`${kind}:${login}`, githubId);
+    boundTo.delete(`${kind}:${githubId}`);
+    // Visible on purpose: whoever signs in first with a listed login keeps its right.
+    log?.warn(
+      { kind, login, githubUserId: githubId.toString() },
+      'Listed GitHub login bound to the account that signed in with it',
+    );
+    await audit(prisma, {
+      actorType: 'SYSTEM',
+      action: 'access.env_login_bound',
+      data: { kind, login, githubUserId: githubId.toString() },
+    });
+    return githubId;
+  }
+
+  // ---- checking on GitHub that an account still has a listed login (stale User rows) ----
+  const VERIFY_TIMEOUT_MS = 5000;
+  /** After GitHub failed to answer, it is not asked again for that account for this long. */
+  const VERIFY_RETRY_MS = 60_000;
+  /** A "this account no longer has that login" answer is reused for this long. */
+  const REFUTED_TTL_MS = 10 * 60_000;
+  type Verdict = 'yes' | 'no' | 'unknown';
+  const verdicts = new Map<string, { v: Verdict; at: number }>(); // `login:githubId`
+  const verifying = new Map<string, Promise<Verdict>>();
+
+  async function askGithub(login: string, githubId: bigint): Promise<Verdict> {
+    if (!deps.github) return 'unknown';
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      // Any active installation's token: a far higher rate limit than anonymous calls.
+      const inst = await prisma.installation.findFirst({
+        where: { suspendedAt: null },
+        orderBy: { createdAt: 'asc' },
+        select: { githubInstallationId: true },
+      });
+      const current = await Promise.race([
+        deps.github.getLoginById(
+          Number(githubId),
+          inst ? Number(inst.githubInstallationId) : undefined,
+        ),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('GitHub timed out')), VERIFY_TIMEOUT_MS);
+        }),
+      ]);
+      if (current?.toLowerCase() === login) return 'yes';
+      log?.warn(
+        { login, githubUserId: githubId.toString(), current },
+        'This account no longer has the listed GitHub login it was stored with: right refused',
+      );
+      return 'no';
+    } catch (err) {
+      log?.warn(
+        { login, githubUserId: githubId.toString(), err },
+        'Could not check a listed GitHub login on GitHub: the last decision by login applies until it can',
+      );
+      return 'unknown';
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Does this account still have this login on GitHub? Cached; one call in flight per pair. */
+  async function verifyLogin(login: string, githubId: bigint): Promise<Verdict> {
+    const key = `${login}:${githubId}`;
+    const hit = verdicts.get(key);
+    const age = hit ? Date.now() - hit.at : Infinity;
+    if (hit?.v === 'no' && age < REFUTED_TTL_MS) return 'no';
+    if (hit?.v === 'unknown' && age < VERIFY_RETRY_MS) return 'unknown';
+    let p = verifying.get(key);
+    if (!p) {
+      p = askGithub(login, githubId);
+      verifying.set(key, p);
+      p.finally(() => verifying.delete(key)).catch(() => undefined);
+    }
+    const v = await p;
+    verdicts.set(key, { v, at: Date.now() });
+    return v;
+  }
+
+  /**
+   * Whether an env list gives this account its right: its login is listed and bound to it, or it
+   * was bound under a listed login and renamed since. An unbound listed login is bound at once
+   * when `verified` (the login comes from GitHub at sign-in). Otherwise (an open session, whose
+   * stored login may be stale) GitHub is asked whether the account still has it: yes binds it,
+   * no refuses the right, and while GitHub cannot answer the decision by login applies, as
+   * before logins were bound (a GitHub outage does not lock the team out).
+   */
+  async function envRight(
+    kind: EnvLoginKind,
+    login: string,
+    githubId: bigint,
+    verified = false,
+  ): Promise<boolean> {
+    const list = envLists[kind];
+    if (list.length === 0) return false;
+    const lower = login.toLowerCase();
+    if (list.includes(lower)) {
+      let owner = await bindingOf(kind, lower);
+      if (owner === null) {
+        const v = verified ? 'yes' : await verifyLogin(lower, githubId);
+        if (v === 'yes') owner = await claim(kind, lower, githubId);
+        else if (v === 'unknown') return true;
+      }
+      if (owner === githubId) return true;
+    }
+    const key = `${kind}:${githubId}`;
+    let hit = boundTo.get(key);
+    if (!hit || !fresh(hit.at)) {
+      const rows = await prisma.envLoginBinding.findMany({
+        where: { kind, githubUserId: githubId },
+        select: { githubLogin: true },
+      });
+      hit = { logins: rows.map((r) => r.githubLogin), at: Date.now() };
+      if (ttl > 0) boundTo.set(key, hit);
+    }
+    return hit.logins.some((l) => list.includes(l));
+  }
+
+  const isAdmin = (user: Pick<User, 'login' | 'githubId'>) =>
+    envRight('ADMIN', user.login, user.githubId);
+
+  async function bindExisting(): Promise<void> {
+    for (const kind of ['ADMIN', 'ALLOWED'] as const) {
+      for (const login of envLists[kind]) {
+        if ((await bindingOf(kind, login)) !== null) continue;
+        // The most recent sign-in under that login (User.login is only updated at sign-in).
+        const user = await prisma.user.findFirst({
+          where: { login: { equals: login, mode: 'insensitive' } },
+          orderBy: [{ lastLoginAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+          select: { githubId: true },
+        });
+        if (!user) continue;
+        if ((await verifyLogin(login, user.githubId)) === 'yes') {
+          await claim(kind, login, user.githubId);
+        }
+      }
+    }
+  }
+
+  async function bindingsView() {
+    const rows = await prisma.envLoginBinding.findMany({ orderBy: { createdAt: 'asc' } });
+    return rows
+      .filter((r) => envLists[r.kind].includes(r.githubLogin))
+      .map((r) => ({
+        kind: r.kind,
+        login: r.githubLogin,
+        githubUserId: r.githubUserId.toString(),
+      }));
+  }
+
+  function forget(): void {
+    grantCache.clear();
     anyApproved = null;
   }
 
   /** Drops the cached grant here and on every other instance (admin decisions apply at once). */
   function invalidate(login: string): void {
-    forget(login);
+    forget();
     void deps.cluster?.bus.publish('allowlist.invalidate', { login });
   }
-  deps.cluster?.bus.on<{ login: string }>('allowlist.invalidate', ({ login }) => {
-    if (typeof login === 'string') forget(login);
-  });
+  deps.cluster?.bus.on<{ login: string }>('allowlist.invalidate', () => forget());
 
   /** Allowlist decision for a user token. Lists and grants first (cheap), then org membership. */
   async function isAllowed(
     login: string,
+    githubId: bigint,
     accessToken: () => Promise<string>,
     cacheKey?: string,
-    githubId?: bigint,
+    verified = false,
   ): Promise<boolean> {
     const lower = login.toLowerCase();
-    if (isAdmin(lower)) return true;
+    if (await envRight('ADMIN', lower, githubId, verified)) return true;
     // An admin's DENIED (declined or removed) wins over the env lists, orgs and open mode.
     const status = await grantStatus(lower, githubId);
     if (status === 'DENIED') return false;
     if (!(await restricted())) return true;
-    if (config.ORCH_ALLOWED_GITHUB_LOGINS.includes(lower)) return true;
+    if (await envRight('ALLOWED', lower, githubId, verified)) return true;
     if (status === 'APPROVED') return true;
     if (config.ORCH_ALLOWED_GITHUB_ORGS.length === 0) return false;
     const hit = cacheKey ? orgCache.get(cacheKey) : undefined;
@@ -253,9 +448,9 @@ export function createAllowlist(deps: AuthDeps): Allowlist {
     try {
       const ok = await isAllowed(
         user.login,
+        user.githubId,
         () => getUserAccessToken(deps, user),
         user.id,
-        user.githubId,
       );
       return ok ? 'allowed' : 'refused';
     } catch (err) {
@@ -265,7 +460,7 @@ export function createAllowlist(deps: AuthDeps): Allowlist {
       throw err;
     }
   }
-  return { isAllowed, check, isAdmin, invalidate };
+  return { isAllowed, check, isAdmin, grantFor, invalidate, bindExisting, bindingsView };
 }
 
 export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
@@ -279,8 +474,14 @@ export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
       'No sign-in allowlist in the environment: unless access was approved on the Access page, any GitHub account can sign in. Set ORCH_ADMIN_GITHUB_LOGINS (and/or ORCH_ALLOWED_GITHUB_LOGINS, ORCH_ALLOWED_GITHUB_ORGS).',
     );
   }
-  const allowlist = createAllowlist(deps);
+  const allowlist = createAllowlist(deps, app.log);
   app.decorate('allowlist', allowlist);
+  // Not awaited: a slow or unreachable GitHub must not keep the server from starting.
+  app.addHook('onReady', async () => {
+    allowlist
+      .bindExisting()
+      .catch((err: unknown) => app.log.warn({ err }, 'Binding the listed GitHub logins failed'));
+  });
   const base = new URL(config.ORCH_BASE_URL);
   const secure = base.protocol === 'https:';
   const redirectUri = `${base.origin}/api/auth/github/callback`;
@@ -367,9 +568,10 @@ export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
     try {
       allowed = await allowlist.isAllowed(
         gh.login,
+        githubId,
         async () => tokens.accessToken,
         undefined,
-        githubId,
+        true,
       );
     } catch (err) {
       req.log.warn({ err }, 'GitHub allowlist check failed');
@@ -382,7 +584,9 @@ export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
       clearCookies.push(cookie(INVITE_COOKIE, '', secure, 0));
     let grant: AccessGrant | null = null;
     if (!allowed) {
-      grant = await prisma.accessGrant.findUnique({ where: { githubLogin } });
+      // A grant row left by the login's previous holder must not block this account.
+      await releaseGrantLogin(prisma, githubLogin, githubId);
+      grant = await allowlist.grantFor(githubLogin, githubId);
       // Invite link opened before signing in: auto-approve (never over an admin's decline).
       const invite = verifyToken(key, INVITE_COOKIE_PURPOSE, cookies[INVITE_COOKIE]);
       const inviteId = typeof invite?.id === 'string' ? invite.id : null;
@@ -416,11 +620,19 @@ export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
           ip: req.ip,
         });
         if (g) allowed = true;
-        else grant = await prisma.accessGrant.findUnique({ where: { githubLogin } });
+        else grant = await allowlist.grantFor(githubLogin, githubId);
       }
     }
     if (!allowed) {
       if (grant?.status === 'DENIED') {
+        // A decline made by login only now follows this account, even after a rename.
+        if (grant.githubUserId === null) {
+          await prisma.accessGrant.updateMany({
+            where: { id: grant.id, githubUserId: null },
+            data: { githubUserId: githubId },
+          });
+          allowlist.invalidate(githubLogin);
+        }
         req.log.warn({ login: gh.login }, 'Sign-in refused: access declined');
         await audit(prisma, {
           actorType: 'SYSTEM',
@@ -484,6 +696,15 @@ export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
       ghTokenExpiresAt: tokens.expiresAt ?? null,
       lastLoginAt: new Date(),
     };
+    // GitHub gives a login to one account at a time: a row still holding this login belongs to
+    // an account that renamed itself or was deleted. Free it (unique column) instead of a 500.
+    const holders = await prisma.user.findMany({
+      where: { login: { equals: gh.login, mode: 'insensitive' }, githubId: { not: githubId } },
+      select: { id: true, githubId: true },
+    });
+    for (const h of holders) {
+      await prisma.user.update({ where: { id: h.id }, data: { login: `former~${h.githubId}` } });
+    }
     const user = await prisma.user.upsert({
       where: { githubId: BigInt(gh.id) },
       create: { githubId: BigInt(gh.id), ...fields },
@@ -517,6 +738,6 @@ export function registerAuth(app: FastifyInstance, deps: AuthDeps): void {
 
   app.get('/api/me', async (req) => {
     const user = requireUser(req);
-    return toApiUser(user, allowlist.isAdmin(user.login));
+    return toApiUser(user, await allowlist.isAdmin(user));
   });
 }

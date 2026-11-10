@@ -29,9 +29,9 @@ import { closeModal } from '../ui/Modal';
 import { motionAllowed } from '../ui/motion';
 import {
   currentSubscription,
+  enableBrowserPush,
   notificationPermission,
   pushSupported,
-  subscribeBrowser,
 } from '../push/browser';
 import { CHANNEL_LABEL, EVENT_META } from '../ui/notificationMeta';
 import { useToast } from '../ui/Toast';
@@ -510,15 +510,7 @@ function BrowserTarget({ data, onTest }: { data: NotificationSettingsView; onTes
         if (permission !== 'denied') toast(t('notifications.settings.browser.notEnabled'), 'info');
         return;
       }
-      const sub = await subscribeBrowser(publicKey);
-      const json = sub.toJSON();
-      if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
-        throw new Error(t('notifications.push.incompleteSubscription'));
-      }
-      await pushSubscribe({
-        endpoint: json.endpoint,
-        keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
-      });
+      await enableBrowserPush(publicKey, pushSubscribe);
       setState('on');
       toast(t('notifications.settings.browser.enabled'));
       await refresh();

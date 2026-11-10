@@ -36,11 +36,11 @@ export default {
     sharedTemplates: 'Modèles partagés',
     participateHelp: {
       GITHUB:
-        'Seuls les collaborateurs du dépôt GitHub peuvent prêter leur capacité Claude. Les autres sont invitées à demander l’accès au propriétaire.',
+        'Seuls les collaborateurs du dépôt GitHub peuvent rejoindre le projet. Les autres sont invitées à demander l’accès au propriétaire. Les tâches ne s’exécutent que chez ceux qui ont l’accès en écriture.',
       ALLOWLIST:
-        'Seules les personnes explicitement autorisées sur ce serveur par le propriétaire ou un administrateur peuvent prêter leur capacité Claude, qu’elles soient ou non collaboratrices GitHub.',
+        'Seules les personnes explicitement autorisées sur ce serveur par le propriétaire ou un administrateur peuvent rejoindre le projet. Les tâches ne s’exécutent que chez celles qui ont l’accès en écriture au dépôt GitHub.',
       ALL_MEMBERS:
-        'Tous les utilisateurs de ce serveur orch peuvent prêter leur capacité Claude à ce projet.',
+        'Tous les utilisateurs de ce serveur orch peuvent rejoindre ce projet. Les tâches ne s’exécutent que chez ceux qui ont l’accès en écriture au dépôt GitHub.',
     },
   },
   reject: {

@@ -21,7 +21,13 @@ const access = {
   approved: [grant({ id: 'g2', githubLogin: 'bob', status: 'APPROVED', note: null })],
   denied: [],
   invites: [],
-  configured: { logins: ['envuser'], orgs: ['acme'], admins: ['root'], allowAny: false },
+  configured: {
+    logins: ['envuser'],
+    orgs: ['acme'],
+    admins: ['root'],
+    allowAny: false,
+    bindings: [{ kind: 'ADMIN', login: 'root', githubUserId: '42' }],
+  },
 };
 const admin = { ...me, isAdmin: true };
 
@@ -39,7 +45,8 @@ describe('Admin access', () => {
     expect(screen.getByText('let me in')).toBeTruthy();
     expect(screen.getByText('bob')).toBeTruthy();
     expect(screen.getAllByText(/configured on the server/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/envuser/)).toBeTruthy();
+    expect(screen.getByText(/envuser \(not bound yet/)).toBeTruthy();
+    expect(screen.getByText('root (GitHub account 42)')).toBeTruthy();
     expect(screen.getByText(/acme/)).toBeTruthy();
   });
 
