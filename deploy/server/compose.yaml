@@ -84,6 +84,11 @@ services:
       ORCH_REPO_ACCESS_GRACE_SEC: ${ORCH_REPO_ACCESS_GRACE_SEC:-900}
       ORCH_ALLOW_ANY_GITHUB_USER: ${ORCH_ALLOW_ANY_GITHUB_USER:-false}
       ORCH_ADMIN_GITHUB_LOGINS: ${ORCH_ADMIN_GITHUB_LOGINS:-}
+      # Data retention in days, 0 keeps the table forever (empty means the server default).
+      RETENTION_AUDIT_DAYS: ${RETENTION_AUDIT_DAYS:-}
+      RETENTION_WEBHOOK_DAYS: ${RETENTION_WEBHOOK_DAYS:-}
+      RETENTION_ASSIGNMENT_DAYS: ${RETENTION_ASSIGNMENT_DAYS:-}
+      RETENTION_EXPIRED_DAYS: ${RETENTION_EXPIRED_DAYS:-}
       # Observability, off by default (see docs/observability.md and deploy/observability).
       METRICS_ENABLED: ${METRICS_ENABLED:-false}
       METRICS_TOKEN: ${METRICS_TOKEN:-}

@@ -158,6 +158,8 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  /// Retention purge.
+  @@index([expiresAt])
 }
 
 model Installation {
@@ -259,6 +261,8 @@ model AuditLog {
   @@index([actorUserId, at])
   @@index([agentId, at])
   @@index([taskId])
+  /// Retention purge.
+  @@index([at])
 }
 
 /// One per member machine. Only the SHA-256 of the credential secret is stored.
@@ -322,6 +326,8 @@ model EnrollmentToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+  /// Retention purge.
+  @@index([expiresAt])
 }
 
 /// Usage figures reported by agents. All ESTIMATES. Retention: 30 days.
@@ -496,6 +502,8 @@ model Assignment {
   @@index([userId, respondedAt])
   /// Dispatcher: usage of the latest SUCCEEDED runs (estimateFor).
   @@index([status, finishedAt])
+  /// Retention purge of offers that never started.
+  @@index([status, updatedAt])
 }
 
 /// M5 personal access token (`orch_pat_<...>`) for the MCP endpoint. Only the SHA-256 is stored.

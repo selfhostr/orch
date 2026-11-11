@@ -89,6 +89,8 @@ docker compose pull && docker compose up -d     # or: docker compose up -d --bui
 
 Servers on v0.9.0 or older: see [Moving from `ghcr.io/theroxat`](#moving-from-ghcriotheroxat-historical) first.
 
+Some releases add database indexes while the server starts (the retention release does, on `AuditLog`, `Session`, `EnrollmentToken` and `Assignment`). On a very large audit log this can take a few seconds, during which writes to that table wait.
+
 Members upgrade their agent with `docker compose -f ~/orch/compose.yaml pull && docker compose -f ~/orch/compose.yaml up -d`, or with one click, see {ref}`updating-agents`.
 
 ## Backups and restore

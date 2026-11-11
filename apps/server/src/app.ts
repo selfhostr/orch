@@ -6,6 +6,7 @@ import { registerAccess } from './access';
 import { registerAvatars, type AvatarFetch } from './avatars';
 import { registerAuth } from './auth';
 import { Cluster } from './cluster';
+import { retentionJob } from './retention';
 import type { Config } from './config';
 import type { PrismaClient } from './db';
 import type { GithubClient } from './github';
@@ -120,6 +121,15 @@ export function buildApp({
     const cluster = new Cluster({ prisma, config, log: app.log, metrics });
     app.decorate('cluster', cluster);
     const deps = { config, prisma, github, metrics, cluster };
+    cluster.onMaintenance(
+      retentionJob({
+        prisma,
+        config,
+        log: app.log,
+        metrics,
+        confirmLeader: () => cluster.leadership.confirm('maintenance'),
+      }),
+    );
     const liveLogs = new LiveLogStore();
     const relay = new LiveLogRelay({ store: liveLogs, cluster });
     const gateway = createAgentGateway(app, { ...deps, liveLogs });
