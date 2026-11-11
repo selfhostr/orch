@@ -6,6 +6,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Added
 
+- `backup/restore.sh --verify` restores a dump (plain or age-encrypted) into a throwaway Postgres of the same major version, checks it (no `pg_restore` error, `_prisma_migrations` present, table and row counts) and removes everything it created, without touching the running server or database. See "Verify a backup" in the backup documentation.
 - A task that has not started can be cancelled from the Backlog (`POST /api/tasks/:id/cancel`, project owner or task creator, with a confirmation dialog). `TaskView` gains `canCancel`.
 - The CI job "Licences and advisories" also runs `pnpm audit --prod --audit-level=high` (high and critical advisories in production dependencies fail the build).
 - A CI job fails when a dependency (dev tools included) has no OSI-approved licence (`pnpm run check:licences`).
@@ -15,6 +16,7 @@ All notable changes to orch. The format follows [Keep a Changelog](https://keepa
 
 ### Changed
 
+- `backup/restore.sh` checks that the dump is readable (`pg_restore --list`) before stopping the server, mounts the backups volume read-only, and always restarts the server, with a message about the state it leaves, when the restore fails or the script is interrupted.
 - Removing a member or a project, denying an access request, revoking an invite link and rotating the notification signing secret now ask for confirmation in the same dialog as revoking a machine or a token. Browser `confirm()` popups are gone.
 - An error with no translation now shows the server's error code: in English after the message, in French after the status (`Request failed (418): teapot`).
 - Dependabot is the only dependency update tool: the second, unused update configuration is removed.

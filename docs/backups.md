@@ -33,7 +33,7 @@ The server stores no uploaded files, so the database is the only state that need
 ```sh
 docker compose ps backup                       # health
 docker compose logs --tail 20 backup           # "backup: wrote orch-....dump (... bytes)"
-docker compose exec backup orch-backup once    # take one now
+docker compose exec -u postgres backup orch-backup once    # take one now
 docker compose exec backup ls -lh /backups     # list
 ```
 
@@ -92,15 +92,35 @@ backup/restore.sh ./downloaded.dump.age --identity ~/orch-backup.key --yes
 | `DUMP`            | `latest` (default), a file name in the volume, or a path on the host (for example from S3) |
 | `--identity FILE` | age private key, required for `.age` dumps (decrypted inside the backup container)         |
 | `--yes`, `-y`     | skip the confirmation prompt (otherwise you must type `restore`)                           |
+| `--verify`        | restore into a throwaway Postgres and check it; production is not touched                  |
 | `--list`          | list the dumps in the volume and exit                                                      |
 
 The dump is staged in a private temporary directory created in `deploy/server` (`.restore.XXXXXX`, removed when the script exits), not in `/tmp`, which is often a small tmpfs. Set `ORCH_RESTORE_TMPDIR` to another directory with room for the dump to stage it there, for example `ORCH_RESTORE_TMPDIR=/srv/scratch backup/restore.sh`.
 
-What it does, in order: checks that the file is a `pg_dump` archive (nothing is touched otherwise), asks for confirmation, **stops the server**, runs `pg_restore --clean --if-exists --single-transaction --exit-on-error` (all or nothing: a failure leaves the database as it was), and starts the server again. The server's entrypoint runs `prisma migrate deploy`, so restoring a dump from an older release upgrades the schema on start.
+What it does, in order: checks that the file is a `pg_dump` archive and that `pg_restore --list` can read it (nothing is touched otherwise), asks for confirmation, **stops the server**, runs `pg_restore --clean --if-exists --single-transaction --exit-on-error` (all or nothing: a failure leaves the database as it was), and starts the server again. The server is started again even if the restore fails or the script is interrupted (Ctrl-C, `kill`), and the script says what state it left. The server's entrypoint runs `prisma migrate deploy`, so restoring a dump from an older release upgrades the schema on start.
+
+Plan for the server to be unavailable during a real restore: one to two minutes for a small database, proportionally more for a large one.
 
 On a new host: install the stack as in {doc}`installation` with the same `.env` (notably the same `ORCH_ENCRYPTION_KEY`) and GitHub App key, start it once with `docker compose up -d postgres backup`, copy the dump to the host, then run `backup/restore.sh ./orch.dump`.
 
-Test the whole chain now and then (restore into a scratch stack). A backup you have never restored is a hope, not a backup.
+## Verify a backup
+
+A backup you have never restored is a hope, not a backup. `--verify` restores a dump into a throwaway Postgres container of the same major version as your stack (`POSTGRES_MAJOR`), with no network, and removes it afterwards, even on failure. The running server and database are never touched, and the backups volume is mounted read-only, so it is safe on a production host at any time:
+
+```sh
+cd orch/deploy/server
+backup/restore.sh --verify                                            # newest dump
+backup/restore.sh --verify orch-20261022T030000Z.dump
+backup/restore.sh --verify ./downloaded.dump.age --identity ~/orch-backup.key
+```
+
+It checks that `pg_restore` reports no error, that the `_prisma_migrations` table exists and that tables were restored, then prints the row count of each table. It exits non-zero otherwise. Allow about the time of a real restore (a minute or so for a small database) and enough free disk for the database in Docker's storage.
+
+Verify after every major update (orch or `POSTGRES_MAJOR`), after changing the backup settings, and now and then on the off-site copy.
+
+## Former variable names
+
+`BACKUP_HOUR_UTC` and `BACKUP_RETENTION_DAYS` are replaced by `BACKUP_SCHEDULE` and `BACKUP_KEEP_DAILY`. The compose file still reads the old names when the new ones are unset, so an existing `.env` keeps working; switch to the new names when convenient.
 
 ## Settings
 
