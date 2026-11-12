@@ -12,13 +12,13 @@
     "@types/node": "^24.0.0",
     "@types/ws": "^8.18.2",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   },
   "dependencies": {
     "@orch/shared": "workspace:*",
     "@xterm/headless": "5.5.0",
     "tsx": "^4.23.15",
-    "ws": "^8.22.1",
+    "ws": "^8.22.2",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
   }
