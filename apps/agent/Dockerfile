@@ -3,10 +3,10 @@
 #
 # Runs as root: the agent holds the host Docker socket (root-equivalent), owns
 # /run/orch.sock and the /data and /secrets volumes. Task containers are non-root.
-FROM docker:28-cli@sha256:625d9431a9f54c5a2bc90f24f0e1c3d55b1349fd857dd85035f98c2c9acbdd4d AS docker-cli
+FROM docker:29-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d AS docker-cli
 
 # ---- deps: production dependencies only. Built in parallel with the runtime stage below. ----
-FROM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS deps
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS deps
 ENV COREPACK_HOME=/opt/corepack \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     CI=true
@@ -18,7 +18,7 @@ COPY apps/agent/package.json apps/agent/
 RUN pnpm install --frozen-lockfile --prod --filter "@orch/agent..."
 
 # ---- runtime ----
-FROM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git screen ca-certificates curl tini \
