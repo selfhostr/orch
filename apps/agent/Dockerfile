@@ -6,7 +6,7 @@
 FROM docker:28-cli@sha256:625d9431a9f54c5a2bc90f24f0e1c3d55b1349fd857dd85035f98c2c9acbdd4d AS docker-cli
 
 # ---- deps: production dependencies only. Built in parallel with the runtime stage below. ----
-FROM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS deps
+FROM node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS deps
 ENV COREPACK_HOME=/opt/corepack \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     CI=true
@@ -18,7 +18,7 @@ COPY apps/agent/package.json apps/agent/
 RUN pnpm install --frozen-lockfile --prod --filter "@orch/agent..."
 
 # ---- runtime ----
-FROM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9
+FROM node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git screen ca-certificates curl tini \
